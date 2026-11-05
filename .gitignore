@@ -28,6 +28,7 @@ yarn-error.log*
 
 # Local environment and keys
 .env*
+!.env.example
 .dev.vars*
 *.pem
 
@@ -43,3 +44,7 @@ yarn-error.log*
 
 # OS metadata
 .DS_Store
+
+# Standalone local build and SQLite records
+/.local/
+/data/
