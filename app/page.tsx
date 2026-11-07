@@ -4,7 +4,7 @@ import WebsiteStudio from '@/components/studio/website-studio';
 import Storefront from '@/components/storefront/storefront';
 
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Sun, Moon, Bell, Search, SlidersHorizontal, CalendarDays, ChartNoAxesCombined, Maximize, X, ArrowUpRight, Download, ChevronRight, Check, RefreshCw, ArrowLeft, Info } from 'lucide-react';
+import { Sun, Moon, Bell, SlidersHorizontal, ChartNoAxesCombined, Maximize, X, ArrowUpRight, Download, ChevronRight, Check, RefreshCw, ArrowLeft, Info } from 'lucide-react';
 import { Popover } from 'radix-ui';
 import { DEFAULT_FROM, DEFAULT_TO, PLATFORMS, PRODUCTS, shiftDate, type DashboardData, type Filters } from '@/lib/dashboard-data';
 
@@ -30,9 +30,32 @@ function PlatformIcon({id}:{id:string}) {
   return <svg className="platform-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 2h3c.3 3 1.6 4.4 4 4.8V10c-1.7-.1-3-.6-4-1.4v7.1a6.3 6.3 0 1 1-6.7-6.3V13a3 3 0 1 0 3.7 3V2Z"/></svg>;
 }
 function Modal({title,children,onClose,wide=false}:{title:string;children:ReactNode;onClose:()=>void;wide?:boolean}) {
-  const ref=useRef<HTMLDialogElement>(null); const titleId=useId();
-  useEffect(()=>{ref.current?.showModal();document.body.style.overflow='hidden';return()=>{document.body.style.overflow='';};},[]);
-  return <dialog ref={ref} aria-labelledby={titleId} className={`modal ${wide?'wide':''}`} onCancel={onClose} onClick={e=>{if(e.target===ref.current)onClose();}}><div className="modal-inner"><div className="modal-heading"><h2 id={titleId}>{title}</h2><IconButton label="Close dialog" onClick={onClose}><X size={20}/></IconButton></div>{children}</div></dialog>;
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+  return (
+    <dialog ref={ref} aria-labelledby={titleId} className={wide ? 'modal wide' : 'modal'}
+      onCancel={event => { event.preventDefault(); onClose(); }}
+      onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="modal-inner">
+        <div className="modal-heading">
+          <h2 id={titleId}>{title}</h2>
+          <IconButton label="Close dialog" onClick={onClose}><X size={20}/></IconButton>
+        </div>
+        {children}
+      </div>
+    </dialog>
+  );
 }
 function AccountPopover({title,trigger,children}:{title:string;trigger:ReactElement;children:ReactNode}) {
   const titleId=useId();
@@ -51,16 +74,36 @@ function Audience({data,large=false}:{data:DashboardData;large?:boolean}) {
   return <div className={`audience-chart ${large?'large':''}`}><div className="activity-labels"><span>Low traffic</span><span>Rising</span><span>Peak hours</span><span>Off-peak</span></div><div className="activity-bars" role="img" aria-label="Hourly audience activity, busiest at 6 PM">{data.audience.map(h=><div key={h.hour} className="activity-slot" tabIndex={0} aria-label={`${String(h.hour).padStart(2,'0')}:00, ${h.visitors.toLocaleString()} demo visitors`}><span className={`activity-fill ${h.hour===14?'lavender':''}`} style={{height:`${h.level}%`}}/><span className="chart-tooltip">{String(h.hour).padStart(2,'0')}:00<strong>{h.visitors.toLocaleString()} visitors</strong></span></div>)}</div><div className="axis-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div></div>;
 }
 function Trend({data,onSelect}:{data:DashboardData;onSelect:(date:string)=>void}) {
+  const days=data.trend.length, compact=days>10;
   const maxOrders=Math.max(...data.trend.map(d=>d.orders),1),maxRevenue=Math.max(...data.trend.map(d=>d.revenue),1);
-  const points=data.trend.map((d,i)=>`${(i+.5)/data.trend.length*1000},${150-d.revenue/maxRevenue*110}`).join(' ');
-  return <div className="trend-plot"><div className="trend-bars">{data.trend.map(d=><button className="trend-day" key={d.date} onClick={()=>onSelect(d.date)} aria-label={`View ${dateLabel(d.date)}: ${d.orders} orders, ${money(d.revenue)} revenue`}><span className="orders-count">{d.orders}</span><span className={`order-bar ${d.orders===maxOrders&&d.orders>0?'lavender':''}`} style={{height:`${d.orders/maxOrders*78}%`}}/><span className="day-label">{Number(d.date.slice(-2))}</span><span className="revenue-label">{money(d.revenue,0)}</span><span className="chart-tooltip">{dateLabel(d.date)}<strong>{d.orders} orders · {money(d.revenue)}</strong></span></button>)}</div><svg className="trend-line" viewBox="0 0 1000 170" preserveAspectRatio="none" aria-hidden="true"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.1" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg></div>;
+  const points=data.trend.map((d,i)=>`${(i+.5)/days*1000},${150-d.revenue/maxRevenue*110}`).join(' ');
+  return (
+    <div className={compact?'trend-scroll':undefined}>
+      <div className="trend-plot" style={compact?{minWidth:days*22}:undefined}>
+        <div className="trend-bars">
+          {data.trend.map((d,i)=>(
+            <button className="trend-day" key={d.date} onClick={()=>onSelect(d.date)} aria-label={`View ${dateLabel(d.date)}: ${d.orders} orders, ${money(d.revenue)} revenue`}>
+              {!compact&&<span className="orders-count">{d.orders}</span>}
+              <span className={`order-bar ${d.orders===maxOrders&&d.orders>0?'lavender':''}`} style={{height:`${d.orders/maxOrders*78}%`}}/>
+              {(!compact||i%3===0)&&<span className="day-label">{compact?dateLabel(d.date):Number(d.date.slice(-2))}</span>}
+              {!compact&&<span className="revenue-label">{money(d.revenue,0)}</span>}
+              <span className="chart-tooltip">{dateLabel(d.date)}<strong>{d.orders} orders · {money(d.revenue)}</strong></span>
+            </button>
+          ))}
+        </div>
+        <svg className="trend-line" viewBox="0 0 1000 170" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.1" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
   const [workspace,setWorkspace]=useState<Workspace>('dashboard');
   const [filters,setFilters]=useState<Filters>({from:DEFAULT_FROM,to:DEFAULT_TO,platform:'all'});
   const [data,setData]=useState<DashboardData|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[reload,setReload]=useState(0);
-  const [modal,setModal]=useState(''),[search,setSearch]=useState(''),[dark,setDark]=useState(false),[draft,setDraft]=useState<Filters>(filters),[formError,setFormError]=useState('');
+  const [modal,setModal]=useState(''),[dark,setDark]=useState(false),[draft,setDraft]=useState<Filters>(filters),[formError,setFormError]=useState('');
   const [selectedDay,setSelectedDay]=useState('2026-10-09'),[dayOpen,setDayOpen]=useState(false),[calendarPage,setCalendarPage]=useState(0);
   useEffect(()=>{
     const sync = () => {
@@ -70,7 +113,6 @@ export default function Dashboard() {
     };
     const navigate = () => {
       sync();
-      setSearch('');
       setModal('');
       window.scrollTo(0, 0);
     };
@@ -88,13 +130,11 @@ export default function Dashboard() {
   const open=(name:string)=>{setDraft(filters);setFormError('');setModal(name);};
   const close=()=>{setModal('');setFormError('');};
   const apply=()=>{if(!draft.from||!draft.to||draft.from>draft.to){setFormError('Choose a valid start and end date.');return;}if((Date.parse(draft.to)-Date.parse(draft.from))/86400000>365){setFormError('Choose a range of up to 366 days.');return;}setFilters({...draft});close();};
+  const hasActiveFilters=filters.platform!=='all'||filters.from!==DEFAULT_FROM||filters.to!==DEFAULT_TO;
   const selectDay=(date:string)=>{setSelectedDay(date);setDayOpen(true);};
   const selectedProduct=PRODUCTS.find(p=>modal===`product:${p.id}`);
   const productStats=data?.products.find(p=>p.id===selectedProduct?.id);
   const day=data?.calendar.find(d=>d.date===selectedDay);
-  const query=search.trim().toLowerCase();
-  const searchProducts=data?.products.filter(p=>`${p.name} ${p.size}`.toLowerCase().includes(query))||[];
-  const searchPlatforms=PLATFORMS.filter(p=>p.name.toLowerCase().includes(query));
   const calendarDays=data?.calendar.slice(calendarPage*35,calendarPage*35+35)||[];
   const offset=calendarDays.length?(new Date(`${calendarDays[0].date}T12:00:00Z`).getUTCDay()+6)%7:0;
   return <div className={`dashboard-app ${dark?'dark':''}`}>
@@ -106,7 +146,6 @@ export default function Dashboard() {
         ))}
         <button disabled title="Analytics is planned for a later phase">Analytics</button>
       </nav>
-      <div className="search-wrap"><label className="search-box"><input aria-label={workspace==='website' ? 'Search storefront' : 'Search products or platforms'} placeholder={workspace==='website' ? 'Search drinkware' : 'Search Options'} value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');if(e.key==='Enter'&&workspace==='website'){const collection=document.getElementById('nova-collection');collection?.focus();collection?.scrollIntoView({block:'start'});}}}/>{search?<button aria-label="Clear search" onClick={()=>setSearch('')}><X size={15}/></button>:<Search size={16}/>}</label>{query&&workspace!=='website'&&<div className="search-results"><small>PRODUCTS & PLATFORMS</small>{searchProducts.map(p=><button key={p.id} onClick={()=>{open(`product:${p.id}`);setSearch('');}}><img src={p.image} alt=""/><span>{p.name}</span><ChevronRight size={14}/></button>)}{searchPlatforms.map(p=><button key={p.id} onClick={()=>{setFilters(f=>({...f,platform:p.id}));setSearch('');if(workspace!=='dashboard')window.location.hash='dashboard';}}><PlatformIcon id={p.id}/><span>{p.name}</span><ChevronRight size={14}/></button>)}{!searchProducts.length&&!searchPlatforms.length&&<p>No results for “{search}”</p>}</div>}</div>
       <div className="account-tools" key={workspace}>
         <IconButton label={dark?'Switch to light theme':'Switch to dark theme'} onClick={toggleTheme}>
           {dark?<Moon size={18}/>:<Sun size={18}/>}
@@ -125,19 +164,27 @@ export default function Dashboard() {
       </div>
     </header>
     {workspace==='studio' ? <WebsiteStudio/> : workspace==='website' ?
-      <Storefront search={search} onSearchChange={setSearch}/> :
-    <main className="main-content"><div className="page-heading"><div><h1>Growth Overview</h1>{(filters.platform!=='all'||filters.from!==DEFAULT_FROM||filters.to!==DEFAULT_TO)&&<div className="active-filters"><span>{rangeLabel(filters.from,filters.to)}</span><span>{PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'}</span><button onClick={()=>setFilters({from:DEFAULT_FROM,to:DEFAULT_TO,platform:'all'})}><X size={12}/> Reset</button></div>}</div><div className="heading-tools"><IconButton label="Filter dashboard" active={filters.platform!=='all'} onClick={()=>open('filters')}><SlidersHorizontal size={18}/></IconButton><IconButton label="Choose date range" onClick={()=>open('date')}><CalendarDays size={18}/></IconButton></div></div>
+      <Storefront/> :
+    <main className="main-content"><div className="page-heading"><div><h1>Growth Overview</h1>{hasActiveFilters&&<div className="active-filters"><span>{rangeLabel(filters.from,filters.to)}</span><span>{PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'}</span><button onClick={()=>setFilters({from:DEFAULT_FROM,to:DEFAULT_TO,platform:'all'})}><X size={12}/> Reset</button></div>}</div><div className="heading-tools"><IconButton label="Filter dashboard" active={hasActiveFilters} onClick={()=>open('filters')}><SlidersHorizontal size={18}/></IconButton></div></div>
       {error?<div className="error-state" role="alert"><Info size={28}/><h2>We couldn’t load your dashboard</h2><p>{error}</p><button className="primary-button" onClick={()=>setReload(n=>n+1)}><RefreshCw size={16}/> Try again</button></div>:!data?<div className="loading-grid" role="status" aria-label="Loading dashboard"><div/><div/><div/><div/><span>Loading your business overview…</span></div>:<>
       <div className={`dashboard-grid ${loading?'refreshing':''}`} aria-busy={loading}>
         <section className="panel products-panel"><div className="panel-heading"><h2>Top 3 products</h2><span>{data.summary.orders.toLocaleString()} orders</span></div><div className="product-list">{data.products.map((product,i)=><button className={`product-row ${i===0?'featured':''}`} key={product.id} onClick={()=>open(`product:${product.id}`)}><div className="product-image"><img src={product.image} alt={product.name}/></div><div className="product-info"><div className="product-name">{product.name} <span>{product.size}</span></div><div className="product-revenue">{money(product.revenue)}</div>{i===0&&<div className="featured-share"><strong>{product.share.toFixed(1)}%</strong><span>{product.orders} orders</span></div>}</div>{i>0&&<div className="product-share"><strong>{product.share.toFixed(1)}%</strong><span>{product.orders} orders</span></div>}</button>)}</div><div className="share-strip" aria-hidden="true">{data.products.map(p=><span key={p.id} style={{flex:p.share||1,background:p.color}}/>)}</div><a className="view-website" href="#website">View Website <ArrowUpRight size={14}/></a></section>
         <section className="panel revenue-panel"><div className="revenue-main"><h2>Revenue</h2><div className="revenue-amount"><strong>{money(data.summary.revenue)}</strong><span className={`growth-badge ${(data.summary.revenueGrowth??0)<0?'negative':''}`}>{data.summary.revenueGrowth===null?'—':`${signed(data.summary.revenueGrowth,1)}%`}</span></div><p>vs {money(data.summary.previousRevenue)} · {rangeLabel(data.previousPeriod.from,data.previousPeriod.to)}</p></div><div className="metric-grid"><div className="metric"><span>ROAS</span><strong>{data.summary.roas.toFixed(1)}×</strong><small>{signed(data.summary.roasChange,1)}</small></div><div className="metric highlighted"><span>Ad spend</span><strong>{money(data.summary.adSpend)}</strong><small>{data.summary.spendGrowth===null?'—':`${signed(data.summary.spendGrowth,1)}%`}</small></div><div className="metric"><span>Orders</span><strong>{data.summary.orders.toLocaleString()}</strong><small>{signed(data.summary.ordersChange)}</small></div><div className="metric"><span>Best ad</span><strong>{money(data.summary.bestAd?.sales||0,0)}</strong><small>{data.summary.bestAd?.name||'No ads'}</small></div><div className="metric"><span>Top product</span><strong>{data.summary.topProduct.orders}</strong><small>{data.summary.topProduct.name}</small></div></div><div className="revenue-legend">{data.products.map(p=><button key={p.id} onClick={()=>open(`product:${p.id}`)}><i style={{background:p.color}}/><b>{p.name}</b><span>{money(p.revenue)}</span><span>{p.share.toFixed(1)}%</span></button>)}</div></section>
         <section className="panel platforms-panel"><div className="panel-heading"><h2>Top {data.platforms.length} {data.platforms.length===1?'platform':'platforms'}</h2><span>{money(data.summary.adSpend)}</span></div><div className="platform-list">{data.platforms.map(p=><button className="platform-row" key={p.id} onClick={()=>setFilters(f=>({...f,platform:f.platform===p.id?'all':p.id}))} title={`Filter by ${p.name}`}><PlatformIcon id={p.id}/><div className="platform-content"><div className="platform-name"><strong>{p.name}</strong><div><b>{money(p.spend)}</b><span>{p.share.toFixed(0)}%</span></div></div><div className="platform-progress"><span style={{width:`${p.share}%`}}/></div><div className="platform-details"><span>CTR {p.ctr.toFixed(1)}%</span><span>Sales {money(p.sales,0)}</span></div></div><ChevronRight className="platform-chevron" size={13}/></button>)}</div>{filters.platform!=='all'&&<button className="text-button" onClick={()=>setFilters(f=>({...f,platform:'all'}))}><ArrowLeft size={12}/> All platforms</button>}</section>
         <section className="panel audience-panel"><div className="panel-heading"><h2>Audience activity</h2><IconButton label="Expand audience activity" onClick={()=>open('audience')}><Maximize size={17}/></IconButton></div><Audience data={data}/></section>
-        <section className="panel trend-panel" id="revenue-trend"><div className="panel-heading"><h2>{data.trend.length} days</h2><span>{rangeLabel(data.trend[0].date,data.trend[data.trend.length-1].date)}</span></div><div className="trend-summary"><div><strong>{data.trendSummary.orders.toLocaleString()}</strong><span>orders</span></div><div><strong>{money(data.trendSummary.revenue,0)}</strong><span>revenue</span></div></div><div className="trend-legend"><span><i/>Orders</span><span><i/>Revenue</span></div><Trend data={data} onSelect={selectDay}/></section>
+        <section className="panel trend-panel" id="revenue-trend"><div className="panel-heading"><h2>{data.trend.length} {data.trend.length===1?'day':'days'}</h2><span>{rangeLabel(data.filters.from,data.filters.to)}</span></div><div className="trend-summary"><div><strong>{data.trendSummary.orders.toLocaleString()}</strong><span>orders</span></div><div><strong>{money(data.trendSummary.revenue,0)}</strong><span>revenue</span></div></div><div className="trend-legend"><span><i/>Orders</span><span><i/>Revenue</span></div><Trend data={data} onSelect={selectDay}/></section>
         <section className="panel calendar-panel"><div className="panel-heading"><h2>Revenue</h2><button className="export-button" title="Download daily revenue as CSV" aria-label="Export revenue CSV" onClick={()=>{window.location.href=`/api/dashboard/export?${new URLSearchParams(filters)}`;}}><span>{money(data.summary.revenue)}</span><Download size={13}/></button></div><div className="calendar-subheading"><span>{rangeLabel(filters.from,filters.to)}</span>{data.calendar.length>35&&<div><button disabled={!calendarPage} onClick={()=>setCalendarPage(p=>p-1)} aria-label="Previous calendar page">‹</button><button disabled={(calendarPage+1)*35>=data.calendar.length} onClick={()=>setCalendarPage(p=>p+1)} aria-label="Next calendar page">›</button></div>}</div><div className="calendar-grid"><div className="weekdays">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=><span key={d}>{d}</span>)}</div><div className="calendar-dates">{Array.from({length:offset},(_,i)=><span key={`empty-${i}`}/>)}{calendarDays.map(d=><button key={d.date} className={`calendar-day ${d.date===selectedDay?'selected':''} ${d.revenue>=800?'busy':''}`} onClick={()=>selectDay(d.date)} aria-label={`${dateLabel(d.date)}: ${money(d.revenue)} revenue, ${d.orders} orders`}><strong>{Number(d.date.slice(-2))}{d.revenue===Math.max(...data.calendar.map(c=>c.revenue))&&d.revenue>0&&<span className="best-day">✦</span>}</strong><span>{money(d.revenue,0)}</span></button>)}</div></div>{dayOpen&&day&&<div className="day-detail" role="status"><div><b>{dateLabel(day.date)}</b><span>{day.orders} orders · {money(day.revenue)}</span></div><button aria-label="Close day details" onClick={()=>setDayOpen(false)}><X size={14}/></button></div>}</section>
       </div><footer><span className="demo-dot"/> Illustrative demo data · No live stores, payments or ad accounts connected. Product imagery from the supplied prototype.</footer></>}
     </main>}
-    {(modal==='date'||modal==='filters')&&<Modal title={modal==='date'?'Choose date range':'Dashboard filters'} onClose={close}><p className="modal-description">Explore performance across your business. All cards update together.</p><div className="date-shortcuts">{[7,10,30].map(days=><button key={days} className={draft.from===shiftDate(DEFAULT_TO,-days+1)&&draft.to===DEFAULT_TO?'chosen':''} onClick={()=>setDraft(d=>({...d,from:shiftDate(DEFAULT_TO,-days+1),to:DEFAULT_TO}))}>Last {days} days</button>)}</div><div className="date-inputs"><label>Start date<input type="date" value={draft.from} onChange={e=>setDraft(d=>({...d,from:e.target.value}))}/></label><span>–</span><label>End date<input type="date" value={draft.to} onChange={e=>setDraft(d=>({...d,to:e.target.value}))}/></label></div><p className="field-hint">Demo records available Aug 13 – Oct 11, 2026. Other dates show an empty overview.</p>{modal==='filters'&&<label className="platform-select">Platform<select aria-label="Platform" value={draft.platform} onChange={e=>setDraft(d=>({...d,platform:e.target.value}))}><option value="all">All platforms</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}{formError&&<p className="form-error" role="alert">{formError}</p>}<div className="modal-actions"><button className="secondary-button" onClick={close}>Cancel</button><button className="primary-button" onClick={apply}><Check size={16}/> Apply {modal==='date'?'date range':'filters'}</button></div></Modal>}
+    {modal==='filters'&&<Modal title="Dashboard filters" onClose={close}>
+      <p className="modal-description">Explore performance across your business. All cards update together.</p>
+      <div className="date-shortcuts">{[7,10,30].map(days=><button key={days} className={draft.from===shiftDate(DEFAULT_TO,-days+1)&&draft.to===DEFAULT_TO?'chosen':''} onClick={()=>setDraft(d=>({...d,from:shiftDate(DEFAULT_TO,-days+1),to:DEFAULT_TO}))}>Last {days} days</button>)}</div>
+      <div className="date-inputs"><label>Start date<input type="date" value={draft.from} onChange={e=>setDraft(d=>({...d,from:e.target.value}))}/></label><span>–</span><label>End date<input type="date" value={draft.to} onChange={e=>setDraft(d=>({...d,to:e.target.value}))}/></label></div>
+      <p className="field-hint">Demo records available Aug 13 – Oct 11, 2026. Other dates show an empty overview.</p>
+      <label className="platform-select">Platform<select aria-label="Platform" value={draft.platform} onChange={e=>setDraft(d=>({...d,platform:e.target.value}))}><option value="all">All platforms</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+      {formError&&<p className="form-error" role="alert">{formError}</p>}
+      <div className="modal-actions"><button className="secondary-button" onClick={close}>Cancel</button><button className="primary-button" onClick={apply}><Check size={16}/> Apply filters</button></div>
+    </Modal>}
     {modal==='audience'&&data&&<Modal title="Audience activity" wide onClose={close}><p className="modal-description">Hourly visitor distribution · {rangeLabel(filters.from,filters.to)} · {PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'}</p><Audience data={data} large/><div className="audience-note"><span className="demo-dot"/> Estimated demo traffic derived from selected-period order volume.</div></Modal>}
     {selectedProduct&&<Modal title={selectedProduct.name} onClose={close}><div className="product-detail-hero"><img src={selectedProduct.image} alt={selectedProduct.name}/><span>{selectedProduct.size}</span></div><p className="modal-description">{selectedProduct.description}</p>{productStats&&<><div className="product-detail-stats"><div><span>Revenue</span><strong>{money(productStats.revenue)}</strong></div><div><span>Orders</span><strong>{productStats.orders}</strong></div><div><span>Revenue share</span><strong>{productStats.share.toFixed(1)}%</strong></div></div><p className="field-hint">{rangeLabel(filters.from,filters.to)} · {PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'} · USD</p></>}</Modal>}
   </div>;

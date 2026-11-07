@@ -82,13 +82,13 @@ export function aggregateDashboard(products: ProductFact[], ads: AdFact[], filte
     const date=shiftDate(filters.from,i),rows=current.filter(p=>p.date===date);
     return {date,revenue:sum(rows,'revenue_cents')/100,orders:sum(rows,'orders')};
   });
-  const trend=calendar.slice(-10), hourly=[12,18,26,39,59,73,81,86,79,86,84,82,80,78,85,86,87,81,88,78,77,68,59,48];
+  const hourly=[12,18,26,39,59,73,81,86,79,86,84,82,80,78,85,86,87,81,88,78,77,68,59,48];
   const bestAd=[...platformData].sort((a,b)=>b.sales-a.sales)[0],prevSpend=sum(prevAds,'spend_cents'),prevSales=sum(prevAds,'sales_cents');
   return {
     mode:'demo' as const,filters,previousPeriod:{from:prevFrom,to:prevTo},availableRange:{from:'2026-08-13',to:DEFAULT_TO},
     summary:{revenue:revenue/100,previousRevenue:prevRevenue/100,revenueGrowth:prevRevenue?(revenue/prevRevenue-1)*100:null,orders:orderCount,ordersChange:orderCount-sum(previous,'orders'),adSpend:adSpend/100,spendGrowth:prevSpend?(adSpend/prevSpend-1)*100:null,roas:adSpend?adSales/adSpend:0,roasChange:(adSpend?adSales/adSpend:0)-(prevSpend?prevSales/prevSpend:0),bestAd:bestAd?{name:bestAd.name,sales:bestAd.sales}:null,topProduct:productData[0]},
-    products:productData,platforms:platformData,audience:hourly.map((level,hour)=>({hour,visitors:Math.round(level*orderCount/30),level:orderCount?level:0})),calendar,trend,
-    trendSummary:{orders:sum(trend,'orders'),revenue:Math.round(sum(trend,'revenue')*100)/100},
+    products:productData,platforms:platformData,audience:hourly.map((level,hour)=>({hour,visitors:Math.round(level*orderCount/30),level:orderCount?level:0})),calendar,trend:calendar,
+    trendSummary:{orders:orderCount,revenue:revenue/100},
   };
 }
 export type DashboardData = ReturnType<typeof aggregateDashboard>;

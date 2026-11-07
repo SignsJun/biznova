@@ -64,9 +64,9 @@ This compatibility mode uses http://127.0.0.1:8787 by default. The standalone ap
 ## Implemented features
 
 - The dashboard retains the prototype's gradient background, navigation, sidebar, card layout, product images, and principal figures.
-- Top products, revenue, advertising ROAS and spend, orders, best ad, platform rankings, hourly audience activity, a 10-day trend, and a revenue calendar.
+- Top products, revenue, advertising ROAS and spend, orders, best ad, platform rankings, hourly audience activity, a daily trend for the selected period, and a revenue calendar.
 - Preset and custom date ranges and platform filters, with consistent calculations across cards and CSV exports.
-- Product search and details, a store preview, expanded audience activity, chart tooltips, daily calendar details, and daily revenue CSV export.
+- Product details, expanded audience activity, chart tooltips, daily calendar details, and daily revenue CSV export.
 - Light and dark themes, keyboard-accessible native dialogs, loading/error/empty states, and mobile layouts.
 - The **AI Chatbot** entry opens Website Agent: enterprise briefs, nine visual directions, persistent projects, conversational edits, version restoration, source inspection, preview inquiries, and full-stack ZIP export.
 - The **Website** entry opens the Nova Home storefront at `/#website`. Browse six drinkware products, search and sort the catalog, and review and download an order preview. The bag is saved in the browser. [Photo credits and price references](public/images/store/SOURCES.md) document the proposed catalog. A separate Analytics module remains planned.
