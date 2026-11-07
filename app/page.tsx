@@ -2,9 +2,17 @@
 
 import WebsiteStudio from '@/components/studio/website-studio';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Sun, Moon, Bell, Search, SlidersHorizontal, CalendarDays, Megaphone, MessageSquare, Globe2, ChartNoAxesCombined, Maximize, X, ArrowUpRight, Download, ChevronRight, Check, RefreshCw, ArrowLeft, Info } from 'lucide-react';
-import { DEFAULT_FROM, DEFAULT_TO, PLATFORMS, shiftDate, type DashboardData, type Filters } from '@/lib/dashboard-data';
+import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Sun, Moon, Bell, Search, SlidersHorizontal, CalendarDays, ChartNoAxesCombined, Maximize, X, ArrowUpRight, Download, ChevronRight, Check, RefreshCw, ArrowLeft, Info } from 'lucide-react';
+import { Popover } from 'radix-ui';
+import { DEFAULT_FROM, DEFAULT_TO, PLATFORMS, PRODUCTS, shiftDate, type DashboardData, type Filters } from '@/lib/dashboard-data';
+
+const workspaces = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'studio', label: 'AI Chatbot' },
+  { id: 'website', label: 'Website' },
+] as const;
+type Workspace = (typeof workspaces)[number]['id'];
 
 const money=(n:number,digits=2)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:digits,maximumFractionDigits:digits}).format(n);
 const dateLabel=(date:string)=>new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
@@ -14,7 +22,7 @@ const signed=(n:number,digits=0)=>{const rounded=Number(n.toFixed(digits));retur
 function IconButton({label,children,onClick,active=false}:{label:string;children:ReactNode;onClick:()=>void;active?:boolean}) {
   return <button className={`icon-button ${active?'active':''}`} aria-label={label} title={label} onClick={onClick}>{children}</button>;
 }
-function Brand(){return <a className="brand" href="/" aria-label="BizNova dashboard"><span className="brand-symbol"><svg width="26" height="28" viewBox="0 0 26 28" fill="none"><path d="M3 5 12 10V18L3 23V5Z" fill="currentColor"/><path d="M14 11 23 16V25L14 20V11Z" fill="currentColor"/><path d="m14 3 9 5-9 5V3Z" fill="currentColor" opacity=".35"/></svg></span><span>BizNova</span></a>}
+function Brand(){return <a className="brand" href="#dashboard" aria-label="BizNova dashboard"><span className="brand-symbol"><svg width="26" height="28" viewBox="0 0 26 28" fill="none"><path d="M3 5 12 10V18L3 23V5Z" fill="currentColor"/><path d="M14 11 23 16V25L14 20V11Z" fill="currentColor"/><path d="m14 3 9 5-9 5V3Z" fill="currentColor" opacity=".35"/></svg></span><span>BizNova</span></a>}
 function PlatformIcon({id}:{id:string}) {
   if(id==='meta')return <svg className="platform-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 16c0-6 2.1-10 5-10 4 0 8 12 11 12 2 0 4-2 4-5 0-5-2-7-4-7-4 0-8 12-12 12-2 0-4-1-4-2Z" stroke="#6f96ce" strokeWidth="2"/></svg>;
   if(id==='google')return <span className="google-icon" aria-hidden="true">G</span>;
@@ -24,6 +32,19 @@ function Modal({title,children,onClose,wide=false}:{title:string;children:ReactN
   const ref=useRef<HTMLDialogElement>(null); const titleId=useId();
   useEffect(()=>{ref.current?.showModal();document.body.style.overflow='hidden';return()=>{document.body.style.overflow='';};},[]);
   return <dialog ref={ref} aria-labelledby={titleId} className={`modal ${wide?'wide':''}`} onCancel={onClose} onClick={e=>{if(e.target===ref.current)onClose();}}><div className="modal-inner"><div className="modal-heading"><h2 id={titleId}>{title}</h2><IconButton label="Close dialog" onClick={onClose}><X size={20}/></IconButton></div>{children}</div></dialog>;
+}
+function AccountPopover({title,trigger,children}:{title:string;trigger:ReactElement;children:ReactNode}) {
+  const titleId=useId();
+  return <Popover.Root>
+    <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+    <Popover.Content className="account-popover" side="bottom" align="end" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}>
+      <div className="account-popover-heading">
+        <h2 id={titleId}>{title}</h2>
+        <Popover.Close className="icon-button" aria-label={`Close ${title.toLowerCase()}`}><X size={16}/></Popover.Close>
+      </div>
+      {children}
+    </Popover.Content>
+  </Popover.Root>;
 }
 function Audience({data,large=false}:{data:DashboardData;large?:boolean}) {
   return <div className={`audience-chart ${large?'large':''}`}><div className="activity-labels"><span>Low traffic</span><span>Rising</span><span>Peak hours</span><span>Off-peak</span></div><div className="activity-bars" role="img" aria-label="Hourly audience activity, busiest at 6 PM">{data.audience.map(h=><div key={h.hour} className="activity-slot" tabIndex={0} aria-label={`${String(h.hour).padStart(2,'0')}:00, ${h.visitors.toLocaleString()} demo visitors`}><span className={`activity-fill ${h.hour===14?'lavender':''}`} style={{height:`${h.level}%`}}/><span className="chart-tooltip">{String(h.hour).padStart(2,'0')}:00<strong>{h.visitors.toLocaleString()} visitors</strong></span></div>)}</div><div className="axis-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div></div>;
@@ -35,12 +56,27 @@ function Trend({data,onSelect}:{data:DashboardData;onSelect:(date:string)=>void}
 }
 
 export default function Dashboard() {
-  const [workspace,setWorkspace]=useState('dashboard');
-  useEffect(()=>{const sync=()=>setWorkspace(window.location.hash==='#studio'?'studio':'dashboard');sync();window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync);},[]);
+  const [workspace,setWorkspace]=useState<Workspace>('dashboard');
   const [filters,setFilters]=useState<Filters>({from:DEFAULT_FROM,to:DEFAULT_TO,platform:'all'});
   const [data,setData]=useState<DashboardData|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[reload,setReload]=useState(0);
   const [modal,setModal]=useState(''),[search,setSearch]=useState(''),[dark,setDark]=useState(false),[draft,setDraft]=useState<Filters>(filters),[formError,setFormError]=useState('');
   const [selectedDay,setSelectedDay]=useState('2026-10-09'),[dayOpen,setDayOpen]=useState(false),[calendarPage,setCalendarPage]=useState(0);
+  useEffect(()=>{
+    const sync = () => {
+      const page = workspaces.find(({id}) => window.location.hash === '#' + id);
+      setWorkspace(page?.id ?? 'dashboard');
+      document.title = 'BizNova · ' + (page && page.id !== 'dashboard' ? page.label : 'Growth Overview');
+    };
+    const navigate = () => {
+      sync();
+      setSearch('');
+      setModal('');
+      window.scrollTo(0, 0);
+    };
+    sync();
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  },[]);
   useEffect(()=>{setDark(localStorage.getItem('biznova-theme')==='dark');},[]);
   useEffect(()=>{
     const controller=new AbortController();setLoading(true);setError('');
@@ -52,33 +88,73 @@ export default function Dashboard() {
   const close=()=>{setModal('');setFormError('');};
   const apply=()=>{if(!draft.from||!draft.to||draft.from>draft.to){setFormError('Choose a valid start and end date.');return;}if((Date.parse(draft.to)-Date.parse(draft.from))/86400000>365){setFormError('Choose a range of up to 366 days.');return;}setFilters({...draft});close();};
   const selectDay=(date:string)=>{setSelectedDay(date);setDayOpen(true);};
-  const selectedProduct=data?.products.find(p=>modal===`product:${p.id}`);
+  const selectedProduct=PRODUCTS.find(p=>modal===`product:${p.id}`);
+  const productStats=data?.products.find(p=>p.id===selectedProduct?.id);
   const day=data?.calendar.find(d=>d.date===selectedDay);
   const query=search.trim().toLowerCase();
   const searchProducts=data?.products.filter(p=>`${p.name} ${p.size}`.toLowerCase().includes(query))||[];
   const searchPlatforms=PLATFORMS.filter(p=>p.name.toLowerCase().includes(query));
   const calendarDays=data?.calendar.slice(calendarPage*35,calendarPage*35+35)||[];
   const offset=calendarDays.length?(new Date(`${calendarDays[0].date}T12:00:00Z`).getUTCDay()+6)%7:0;
-  if(workspace==='studio') return <WebsiteStudio onDashboard={()=>{window.location.hash='dashboard';setWorkspace('dashboard');}}/>;
   return <div className={`dashboard-app ${dark?'dark':''}`}>
-    <header className="topbar"><Brand/><nav className="topnav" aria-label="Main navigation"><button className="selected" aria-current="page">Dashboard</button><button onClick={()=>{window.location.hash='studio';setWorkspace('studio');}}>AI Chatbot</button><button onClick={()=>open('store')}>Website</button><button disabled title="Analytics is planned for a later phase">Analytics</button></nav><div className="search-wrap"><label className="search-box"><input aria-label="Search products or platforms" placeholder="Search Options" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}}/>{search?<button aria-label="Clear search" onClick={()=>setSearch('')}><X size={15}/></button>:<Search size={16}/>}</label>{query&&<div className="search-results"><small>PRODUCTS & PLATFORMS</small>{searchProducts.map(p=><button key={p.id} onClick={()=>{open(`product:${p.id}`);setSearch('');}}><img src={p.image} alt=""/><span>{p.name}</span><ChevronRight size={14}/></button>)}{searchPlatforms.map(p=><button key={p.id} onClick={()=>{setFilters(f=>({...f,platform:p.id}));setSearch('');}}><PlatformIcon id={p.id}/><span>{p.name}</span><ChevronRight size={14}/></button>)}{!searchProducts.length&&!searchPlatforms.length&&<p>No results for “{search}”</p>}</div>}</div><div className="account-tools"><IconButton label={dark?'Switch to light theme':'Switch to dark theme'} onClick={toggleTheme}>{dark?<Moon size={18}/>:<Sun size={18}/>}</IconButton><IconButton label="Notifications" onClick={()=>open('notifications')}><Bell size={18}/></IconButton><button className="profile" onClick={()=>open('profile')}><img src="/images/avatar.png" alt=""/><span>NOVA HOME</span></button></div></header>
-    <aside className="sidebar" aria-label="Dashboard tools"><div className="side-links"><IconButton label="Growth overview" active onClick={()=>window.scrollTo({top:0,behavior:'smooth'})}><Megaphone size={21}/></IconButton><button className="icon-button" title="Website Agent" aria-label="Open Website Agent" onClick={()=>{window.location.hash='studio';setWorkspace('studio');}}><MessageSquare size={21}/></button><IconButton label="View store preview" onClick={()=>open('store')}><Globe2 size={21}/></IconButton><IconButton label="Jump to revenue trend" onClick={()=>document.getElementById('revenue-trend')?.scrollIntoView({behavior:'smooth',block:'center'})}><ChartNoAxesCombined size={21}/></IconButton></div><IconButton label={dark?'Switch to light theme':'Switch to dark theme'} onClick={toggleTheme}>{dark?<Moon size={22}/>:<Sun size={22}/>}</IconButton></aside>
+    <header className="topbar">
+      <Brand/>
+      <nav className="topnav" aria-label="Main navigation">
+        {workspaces.map(({id,label}) => (
+          <a key={id} href={'#' + id} aria-current={workspace===id?'page':undefined}>{label}</a>
+        ))}
+        <button disabled title="Analytics is planned for a later phase">Analytics</button>
+      </nav>
+      <div className="search-wrap"><label className="search-box"><input aria-label="Search products or platforms" placeholder="Search Options" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}}/>{search?<button aria-label="Clear search" onClick={()=>setSearch('')}><X size={15}/></button>:<Search size={16}/>}</label>{query&&<div className="search-results"><small>PRODUCTS & PLATFORMS</small>{searchProducts.map(p=><button key={p.id} onClick={()=>{open(`product:${p.id}`);setSearch('');}}><img src={p.image} alt=""/><span>{p.name}</span><ChevronRight size={14}/></button>)}{searchPlatforms.map(p=><button key={p.id} onClick={()=>{setFilters(f=>({...f,platform:p.id}));setSearch('');if(workspace!=='dashboard')window.location.hash='dashboard';}}><PlatformIcon id={p.id}/><span>{p.name}</span><ChevronRight size={14}/></button>)}{!searchProducts.length&&!searchPlatforms.length&&<p>No results for “{search}”</p>}</div>}</div>
+      <div className="account-tools" key={workspace}>
+        <IconButton label={dark?'Switch to light theme':'Switch to dark theme'} onClick={toggleTheme}>
+          {dark?<Moon size={18}/>:<Sun size={18}/>}
+        </IconButton>
+        <AccountPopover title="Notifications" trigger={<button className="icon-button" aria-label="Notifications"><Bell size={18}/></button>}>
+          <div className="notification"><span className="notification-icon"><ChartNoAxesCombined size={22}/></span><div><h3>Your overview is ready</h3><p>The demo dataset is available for Aug 13 – Oct 11, 2026. Choose a period to explore your performance.</p><small>Demo workspace</small></div></div>
+          <div className="notification"><span className="notification-icon lavender"><Info size={22}/></span><div><h3>Connect your data next</h3><p>Store and advertising integrations can be added in the next implementation phase.</p><small>No live accounts connected</small></div></div>
+        </AccountPopover>
+        <AccountPopover title="Your profile" trigger={<button className="profile" aria-label="User profile"><img src="/images/avatar.png" alt=""/><span>NOVA HOME</span></button>}>
+          <div className="workspace-profile"><img src="/images/avatar.png" alt="Demo workspace avatar"/><div><h3>NOVA HOME</h3><p>BizNova demo workspace</p></div></div>
+          <div className="workspace-row"><span>Currency</span><strong>USD · US Dollar</strong></div>
+          <div className="workspace-row"><span>Reporting timezone</span><strong>UTC</strong></div>
+          <div className="workspace-row"><span>Data source</span><strong>Figma demo dataset</strong></div>
+          <button className="secondary-button full-width" onClick={toggleTheme}>{dark?<Sun size={17}/>:<Moon size={17}/>} Switch to {dark?'light':'dark'} theme</button>
+        </AccountPopover>
+      </div>
+    </header>
+    {workspace==='studio' ? <WebsiteStudio/> : workspace==='website' ?
+      <main className="main-content website-page">
+        <div className="page-heading"><h1>Website</h1></div>
+        <section className="store-intro" aria-labelledby="store-title">
+          <span>NOVA HOME · THE EVERYDAY COLLECTION</span>
+          <h2 id="store-title">Good things. For every day.</h2>
+          <p>A preview of the products behind your growth.</p>
+        </section>
+        <section className="store-products" aria-label="Everyday collection">
+          {PRODUCTS.map(product=>(
+            <button className="panel" key={product.id} onClick={()=>open(`product:${product.id}`)}>
+              <div><img src={product.image} alt=""/></div>
+              <strong>{product.name}<ArrowUpRight size={16}/></strong>
+              <span>{product.size} · View product details</span>
+            </button>
+          ))}
+        </section>
+        <p className="field-hint">Store preview · Demo products</p>
+      </main> :
     <main className="main-content"><div className="page-heading"><div><h1>Growth Overview</h1>{(filters.platform!=='all'||filters.from!==DEFAULT_FROM||filters.to!==DEFAULT_TO)&&<div className="active-filters"><span>{rangeLabel(filters.from,filters.to)}</span><span>{PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'}</span><button onClick={()=>setFilters({from:DEFAULT_FROM,to:DEFAULT_TO,platform:'all'})}><X size={12}/> Reset</button></div>}</div><div className="heading-tools"><IconButton label="Filter dashboard" active={filters.platform!=='all'} onClick={()=>open('filters')}><SlidersHorizontal size={18}/></IconButton><IconButton label="Choose date range" onClick={()=>open('date')}><CalendarDays size={18}/></IconButton></div></div>
       {error?<div className="error-state" role="alert"><Info size={28}/><h2>We couldn’t load your dashboard</h2><p>{error}</p><button className="primary-button" onClick={()=>setReload(n=>n+1)}><RefreshCw size={16}/> Try again</button></div>:!data?<div className="loading-grid" role="status" aria-label="Loading dashboard"><div/><div/><div/><div/><span>Loading your business overview…</span></div>:<>
       <div className={`dashboard-grid ${loading?'refreshing':''}`} aria-busy={loading}>
-        <section className="panel products-panel"><div className="panel-heading"><h2>Top 3 products</h2><span>{data.summary.orders.toLocaleString()} orders</span></div><div className="product-list">{data.products.map((product,i)=><button className={`product-row ${i===0?'featured':''}`} key={product.id} onClick={()=>open(`product:${product.id}`)}><div className="product-image"><img src={product.image} alt={product.name}/></div><div className="product-info"><div className="product-name">{product.name} <span>{product.size}</span></div><div className="product-revenue">{money(product.revenue)}</div>{i===0&&<div className="featured-share"><strong>{product.share.toFixed(1)}%</strong><span>{product.orders} orders</span></div>}</div>{i>0&&<div className="product-share"><strong>{product.share.toFixed(1)}%</strong><span>{product.orders} orders</span></div>}</button>)}</div><div className="share-strip" aria-hidden="true">{data.products.map(p=><span key={p.id} style={{flex:p.share||1,background:p.color}}/>)}</div><button className="view-website" onClick={()=>open('store')}>View Website <ArrowUpRight size={14}/></button></section>
+        <section className="panel products-panel"><div className="panel-heading"><h2>Top 3 products</h2><span>{data.summary.orders.toLocaleString()} orders</span></div><div className="product-list">{data.products.map((product,i)=><button className={`product-row ${i===0?'featured':''}`} key={product.id} onClick={()=>open(`product:${product.id}`)}><div className="product-image"><img src={product.image} alt={product.name}/></div><div className="product-info"><div className="product-name">{product.name} <span>{product.size}</span></div><div className="product-revenue">{money(product.revenue)}</div>{i===0&&<div className="featured-share"><strong>{product.share.toFixed(1)}%</strong><span>{product.orders} orders</span></div>}</div>{i>0&&<div className="product-share"><strong>{product.share.toFixed(1)}%</strong><span>{product.orders} orders</span></div>}</button>)}</div><div className="share-strip" aria-hidden="true">{data.products.map(p=><span key={p.id} style={{flex:p.share||1,background:p.color}}/>)}</div><a className="view-website" href="#website">View Website <ArrowUpRight size={14}/></a></section>
         <section className="panel revenue-panel"><div className="revenue-main"><h2>Revenue</h2><div className="revenue-amount"><strong>{money(data.summary.revenue)}</strong><span className={`growth-badge ${(data.summary.revenueGrowth??0)<0?'negative':''}`}>{data.summary.revenueGrowth===null?'—':`${signed(data.summary.revenueGrowth,1)}%`}</span></div><p>vs {money(data.summary.previousRevenue)} · {rangeLabel(data.previousPeriod.from,data.previousPeriod.to)}</p></div><div className="metric-grid"><div className="metric"><span>ROAS</span><strong>{data.summary.roas.toFixed(1)}×</strong><small>{signed(data.summary.roasChange,1)}</small></div><div className="metric highlighted"><span>Ad spend</span><strong>{money(data.summary.adSpend)}</strong><small>{data.summary.spendGrowth===null?'—':`${signed(data.summary.spendGrowth,1)}%`}</small></div><div className="metric"><span>Orders</span><strong>{data.summary.orders.toLocaleString()}</strong><small>{signed(data.summary.ordersChange)}</small></div><div className="metric"><span>Best ad</span><strong>{money(data.summary.bestAd?.sales||0,0)}</strong><small>{data.summary.bestAd?.name||'No ads'}</small></div><div className="metric"><span>Top product</span><strong>{data.summary.topProduct.orders}</strong><small>{data.summary.topProduct.name}</small></div></div><div className="revenue-legend">{data.products.map(p=><button key={p.id} onClick={()=>open(`product:${p.id}`)}><i style={{background:p.color}}/><b>{p.name}</b><span>{money(p.revenue)}</span><span>{p.share.toFixed(1)}%</span></button>)}</div></section>
         <section className="panel platforms-panel"><div className="panel-heading"><h2>Top {data.platforms.length} {data.platforms.length===1?'platform':'platforms'}</h2><span>{money(data.summary.adSpend)}</span></div><div className="platform-list">{data.platforms.map(p=><button className="platform-row" key={p.id} onClick={()=>setFilters(f=>({...f,platform:f.platform===p.id?'all':p.id}))} title={`Filter by ${p.name}`}><PlatformIcon id={p.id}/><div className="platform-content"><div className="platform-name"><strong>{p.name}</strong><div><b>{money(p.spend)}</b><span>{p.share.toFixed(0)}%</span></div></div><div className="platform-progress"><span style={{width:`${p.share}%`}}/></div><div className="platform-details"><span>CTR {p.ctr.toFixed(1)}%</span><span>Sales {money(p.sales,0)}</span></div></div><ChevronRight className="platform-chevron" size={13}/></button>)}</div>{filters.platform!=='all'&&<button className="text-button" onClick={()=>setFilters(f=>({...f,platform:'all'}))}><ArrowLeft size={12}/> All platforms</button>}</section>
         <section className="panel audience-panel"><div className="panel-heading"><h2>Audience activity</h2><IconButton label="Expand audience activity" onClick={()=>open('audience')}><Maximize size={17}/></IconButton></div><Audience data={data}/></section>
         <section className="panel trend-panel" id="revenue-trend"><div className="panel-heading"><h2>{data.trend.length} days</h2><span>{rangeLabel(data.trend[0].date,data.trend[data.trend.length-1].date)}</span></div><div className="trend-summary"><div><strong>{data.trendSummary.orders.toLocaleString()}</strong><span>orders</span></div><div><strong>{money(data.trendSummary.revenue,0)}</strong><span>revenue</span></div></div><div className="trend-legend"><span><i/>Orders</span><span><i/>Revenue</span></div><Trend data={data} onSelect={selectDay}/></section>
         <section className="panel calendar-panel"><div className="panel-heading"><h2>Revenue</h2><button className="export-button" title="Download daily revenue as CSV" aria-label="Export revenue CSV" onClick={()=>{window.location.href=`/api/dashboard/export?${new URLSearchParams(filters)}`;}}><span>{money(data.summary.revenue)}</span><Download size={13}/></button></div><div className="calendar-subheading"><span>{rangeLabel(filters.from,filters.to)}</span>{data.calendar.length>35&&<div><button disabled={!calendarPage} onClick={()=>setCalendarPage(p=>p-1)} aria-label="Previous calendar page">‹</button><button disabled={(calendarPage+1)*35>=data.calendar.length} onClick={()=>setCalendarPage(p=>p+1)} aria-label="Next calendar page">›</button></div>}</div><div className="calendar-grid"><div className="weekdays">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=><span key={d}>{d}</span>)}</div><div className="calendar-dates">{Array.from({length:offset},(_,i)=><span key={`empty-${i}`}/>)}{calendarDays.map(d=><button key={d.date} className={`calendar-day ${d.date===selectedDay?'selected':''} ${d.revenue>=800?'busy':''}`} onClick={()=>selectDay(d.date)} aria-label={`${dateLabel(d.date)}: ${money(d.revenue)} revenue, ${d.orders} orders`}><strong>{Number(d.date.slice(-2))}{d.revenue===Math.max(...data.calendar.map(c=>c.revenue))&&d.revenue>0&&<span className="best-day">✦</span>}</strong><span>{money(d.revenue,0)}</span></button>)}</div></div>{dayOpen&&day&&<div className="day-detail" role="status"><div><b>{dateLabel(day.date)}</b><span>{day.orders} orders · {money(day.revenue)}</span></div><button aria-label="Close day details" onClick={()=>setDayOpen(false)}><X size={14}/></button></div>}</section>
       </div><footer><span className="demo-dot"/> Illustrative demo data · No live stores, payments or ad accounts connected. Product imagery from the supplied prototype.</footer></>}
-    </main>
+    </main>}
     {(modal==='date'||modal==='filters')&&<Modal title={modal==='date'?'Choose date range':'Dashboard filters'} onClose={close}><p className="modal-description">Explore performance across your business. All cards update together.</p><div className="date-shortcuts">{[7,10,30].map(days=><button key={days} className={draft.from===shiftDate(DEFAULT_TO,-days+1)&&draft.to===DEFAULT_TO?'chosen':''} onClick={()=>setDraft(d=>({...d,from:shiftDate(DEFAULT_TO,-days+1),to:DEFAULT_TO}))}>Last {days} days</button>)}</div><div className="date-inputs"><label>Start date<input type="date" value={draft.from} onChange={e=>setDraft(d=>({...d,from:e.target.value}))}/></label><span>–</span><label>End date<input type="date" value={draft.to} onChange={e=>setDraft(d=>({...d,to:e.target.value}))}/></label></div><p className="field-hint">Demo records available Aug 13 – Oct 11, 2026. Other dates show an empty overview.</p>{modal==='filters'&&<label className="platform-select">Platform<select aria-label="Platform" value={draft.platform} onChange={e=>setDraft(d=>({...d,platform:e.target.value}))}><option value="all">All platforms</option>{PLATFORMS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}{formError&&<p className="form-error" role="alert">{formError}</p>}<div className="modal-actions"><button className="secondary-button" onClick={close}>Cancel</button><button className="primary-button" onClick={apply}><Check size={16}/> Apply {modal==='date'?'date range':'filters'}</button></div></Modal>}
     {modal==='audience'&&data&&<Modal title="Audience activity" wide onClose={close}><p className="modal-description">Hourly visitor distribution · {rangeLabel(filters.from,filters.to)} · {PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'}</p><Audience data={data} large/><div className="audience-note"><span className="demo-dot"/> Estimated demo traffic derived from selected-period order volume.</div></Modal>}
-    {selectedProduct&&<Modal title={selectedProduct.name} onClose={close}><div className="product-detail-hero"><img src={selectedProduct.image} alt={selectedProduct.name}/><span>{selectedProduct.size}</span></div><p className="modal-description">{selectedProduct.description}</p><div className="product-detail-stats"><div><span>Revenue</span><strong>{money(selectedProduct.revenue)}</strong></div><div><span>Orders</span><strong>{selectedProduct.orders}</strong></div><div><span>Revenue share</span><strong>{selectedProduct.share.toFixed(1)}%</strong></div></div><p className="field-hint">{rangeLabel(filters.from,filters.to)} · {PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'} · USD</p></Modal>}
-    {modal==='store'&&<Modal title="NOVA HOME" wide onClose={close}><div className="store-intro"><span>THE EVERYDAY COLLECTION</span><h3>Good things.<br/>For every day.</h3><p>A preview of the products behind your growth.</p></div><div className="store-products">{(data?.products||[]).map(p=><button key={p.id} onClick={()=>setModal(`product:${p.id}`)}><div><img src={p.image} alt={p.name}/></div><strong>{p.name} <ArrowUpRight size={15}/></strong><span>{p.size} · View performance</span></button>)}</div><p className="field-hint">Store preview · Demo products · Checkout is outside this dashboard phase.</p></Modal>}
-    {modal==='notifications'&&<Modal title="Your updates" onClose={close}><div className="notification"><span className="notification-icon"><ChartNoAxesCombined size={22}/></span><div><h3>Your overview is ready</h3><p>The demo dataset is available for Aug 13 – Oct 11, 2026. Choose a period to explore your performance.</p><small>Demo workspace</small></div></div><div className="notification"><span className="notification-icon lavender"><Info size={22}/></span><div><h3>Connect your data next</h3><p>Store and advertising integrations can be added in the next implementation phase.</p><small>No live accounts connected</small></div></div></Modal>}
-    {modal==='profile'&&<Modal title="Your workspace" onClose={close}><div className="workspace-profile"><img src="/images/avatar.png" alt="Demo workspace avatar"/><div><h3>NOVA HOME</h3><p>BizNova demo workspace</p></div></div><div className="workspace-row"><span>Currency</span><strong>USD · US Dollar</strong></div><div className="workspace-row"><span>Reporting timezone</span><strong>UTC</strong></div><div className="workspace-row"><span>Data source</span><strong>Figma demo dataset</strong></div><button className="secondary-button full-width" onClick={toggleTheme}>{dark?<Sun size={17}/>:<Moon size={17}/>} Switch to {dark?'light':'dark'} theme</button></Modal>}
+    {selectedProduct&&<Modal title={selectedProduct.name} onClose={close}><div className="product-detail-hero"><img src={selectedProduct.image} alt={selectedProduct.name}/><span>{selectedProduct.size}</span></div><p className="modal-description">{selectedProduct.description}</p>{productStats&&<><div className="product-detail-stats"><div><span>Revenue</span><strong>{money(productStats.revenue)}</strong></div><div><span>Orders</span><strong>{productStats.orders}</strong></div><div><span>Revenue share</span><strong>{productStats.share.toFixed(1)}%</strong></div></div><p className="field-hint">{rangeLabel(filters.from,filters.to)} · {PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'} · USD</p></>}</Modal>}
   </div>;
 }
