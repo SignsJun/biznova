@@ -69,7 +69,7 @@ This compatibility mode uses http://127.0.0.1:8787 by default. The standalone ap
 - Product search and details, a store preview, expanded audience activity, chart tooltips, daily calendar details, and daily revenue CSV export.
 - Light and dark themes, keyboard-accessible native dialogs, loading/error/empty states, and mobile layouts.
 - The **AI Chatbot** entry opens Website Agent: enterprise briefs, nine visual directions, persistent projects, conversational edits, version restoration, source inspection, preview inquiries, and full-stack ZIP export.
-- A separate Analytics module remains planned. The dashboard's store view is a product preview and does not include checkout.
+- The **Website** entry opens the Nova Home storefront at `/#website`. Browse six drinkware products, search and sort the catalog, and review and download an order preview. The bag is saved in the browser. [Photo credits and price references](public/images/store/SOURCES.md) document the proposed catalog. A separate Analytics module remains planned.
 
 ## Architecture
 
