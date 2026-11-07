@@ -38,6 +38,7 @@ export function initStudio(db) {
   if (!db.prepare('PRAGMA table_info(studio_agent_runs)').all().some(column=>column.name==='scope')) {
     db.exec("ALTER TABLE studio_agent_runs ADD COLUMN scope TEXT NOT NULL DEFAULT 'auto'");
   }
+  if(!db.prepare('PRAGMA table_info(studio_agent_runs)').all().some(c=>c.name==='details_json'))db.exec("ALTER TABLE studio_agent_runs ADD COLUMN details_json TEXT NOT NULL DEFAULT '{}'");
   initialized.add(db);
 }
 const specOf = row => JSON.parse(row.spec_json);
@@ -56,9 +57,9 @@ export function getProject(db,id) {
 export function listAgentRuns(db,projectId) {
   initStudio(db);
   return db.prepare(`SELECT id, version_id AS versionId, revision, status, started_at AS startedAt,
-    completed_at AS completedAt, steps_json, changed_fields_json, model_turns AS modelTurns, model, scope
+    completed_at AS completedAt, steps_json, changed_fields_json, model_turns AS modelTurns, model, scope, details_json
     FROM studio_agent_runs WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100`).all(projectId).map(row=>({
-    id:row.id,versionId:row.versionId,revision:row.revision,status:row.status,
+    ...JSON.parse(row.details_json||'{}'),id:row.id,versionId:row.versionId,revision:row.revision,status:row.status,
     startedAt:row.startedAt,completedAt:row.completedAt,steps:JSON.parse(row.steps_json),
     changedFields:JSON.parse(row.changed_fields_json),modelTurns:row.modelTurns,scope:publicScope(row.scope),...(row.model?{model:row.model}:{})
   }));
@@ -79,10 +80,10 @@ function writeAgentRun(db,projectId,versionId,revision,run,now) {
     durationMs:step.durationMs,changedFields:step.changedFields
   }));
   db.prepare(`INSERT INTO studio_agent_runs
-    (id,project_id,version_id,revision,status,started_at,completed_at,steps_json,changed_fields_json,model_turns,model,created_at,scope)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    (id,project_id,version_id,revision,status,started_at,completed_at,steps_json,changed_fields_json,model_turns,model,created_at,scope,details_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     run.id,projectId,versionId,revision,run.status,run.startedAt,run.completedAt,
-    JSON.stringify(steps),JSON.stringify(run.changedFields),run.modelTurns,run.model||null,now,publicScope(run.scope)
+    JSON.stringify(steps),JSON.stringify(run.changedFields),run.modelTurns,run.model||null,now,publicScope(run.scope),JSON.stringify({...(run.plan?{plan:run.plan}:{}),...(run.checks?{checks:run.checks}:{})})
   );
 }
 export function createProject(db,{name,prompt,spec,summary,agentRun}) {

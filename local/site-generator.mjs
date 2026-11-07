@@ -1,3 +1,5 @@
+import { assertPages, isDocumentHref } from './site-document.mjs';
+import { renderDocumentPage, documentPageFiles } from './site-document-renderer.mjs';
 import { STYLE_IDS, STYLE_CATALOG } from '../lib/studio-styles.ts';
 import { renderStyleVariant } from './site-style-variants.mjs';
 // Original, dependency-free website compositions. Gallery references inform the
@@ -96,10 +98,12 @@ const safeHref = value => typeof value==='string' && /^#[a-z][a-z\d_-]{0,40}$/i.
 
 export function normalizeSpec(input={}) {
   if (!input || typeof input!=='object' || Array.isArray(input)) input={};
+  if(Object.hasOwn(input,'pages'))assertPages(input.pages);
   const style=STYLES.has(input.style)?input.style:'glass';
   const locale='en';
   const defaults=DEFAULT_SPEC;
   return {
+    ...(input.pages?{pages:structuredClone(input.pages)}:{}),
     ...(['business','toy-store'].includes(input.pageType)?{pageType:input.pageType}:{}),
     brand:clean(input.brand,defaults.brand,80,false), tagline:clean(input.tagline,defaults.tagline,140),
     headline:clean(input.headline,defaults.headline,220), description:clean(input.description,defaults.description,800),
@@ -108,7 +112,7 @@ export function normalizeSpec(input={}) {
     style, accent:typeof input.accent==='string' && /^#[a-f\d]{6}$/i.test(input.accent)?input.accent:ACCENTS[style], locale,
     services:Array.isArray(input.services)&&input.services.length ? input.services.slice(0,6).map((s,i)=>({title:clean(s?.title,defaults.services[i%defaults.services.length].title,100),description:clean(s?.description,defaults.services[i%defaults.services.length].description,500)})) : defaults.services.map(s=>({...s})),
     aboutTitle:clean(input.aboutTitle,defaults.aboutTitle,220), aboutText:clean(input.aboutText,defaults.aboutText,1000),
-    nav:Array.isArray(input.nav)&&input.nav.length ? input.nav.slice(0,5).map((n,i)=>({label:clean(n?.label,defaults.nav[i%defaults.nav.length].label,50),href:safeHref(n?.href)})) : defaults.nav.map(n=>({...n})),
+    nav:Array.isArray(input.nav)&&input.nav.length ? input.nav.slice(0,5).map((n,i)=>({label:clean(n?.label,defaults.nav[i%defaults.nav.length].label,50),href:input.pages&&isDocumentHref(n?.href)?n.href:safeHref(n?.href)})) : defaults.nav.map(n=>({...n})),
     footer:clean(input.footer,defaults.footer,300),
   };
 }
@@ -211,6 +215,7 @@ function clientScript({preview,projectId,zh}){
 
 export function renderSite(input,options={}) {
   const spec=normalizeSpec(input),e=escape,zh=false,toy=spec.pageType==='toy-store';
+  if(spec.pages)return renderDocumentPage(spec,{...options,escape,arrow,mark:toy?toyMark:mark,clientScript,toyArtwork,toyCollectionArt});
   const ui=toy?{
     menu:'Toggle navigation',section:'FIND YOUR NEXT BUILD',sectionTitle:'Little bricks. Big possibilities.',footnote:'For curious minds. For the joy of building.',about:'BUILT AROUND PLAY',visual:'IMAGINE / BUILD / REPEAT',process:['Find your favorite world','Pick a building adventure','Make it your own'],faq:'A LITTLE HELP',faqTitle:'Good questions. Great builds.',faqs:[['How do I choose a set?','Think about the builder’s interests and experience. Tell us what they enjoy, and we can help you explore a building adventure that feels right.'],['Can you help me find a gift?','Absolutely. Share the occasion, the builder’s interests and your budget through the enquiry form. We can help you narrow down your ideas.'],['How can I ask about a set?','Send us a message with the set or collection you have in mind. Ask us to confirm availability, pricing and any delivery details before placing an order.']],contact:'LET’S FIND YOUR NEXT BUILD',contactTitle:'A little help choosing?',contactText:'A gift for someone curious. A new world for your shelf. Tell us what you are looking for, and let’s find your next building adventure.',name:'Your name',namePlaceholder:'Alex Morgan',email:'Email address',emailPlaceholder:'you@example.com',company:'Occasion (optional)',companyPlaceholder:'A birthday, a new hobby, just because…',message:'What would you like to build?',messagePlaceholder:'Tell us about the builder, a collection or a set you have in mind…',submit:'Ask about a set',local:'Your enquiry is saved in this local demo.',top:'Back to top',rights:'All rights reserved.',work:'Made for curious minds.'
   }:{
@@ -240,8 +245,8 @@ mkdirSync(join(root,'data'),{recursive:true});
 const db=new DatabaseSync(join(root,'data','site.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL, company TEXT NOT NULL DEFAULT \'\', message TEXT NOT NULL, created_at TEXT NOT NULL)');
 const insert=db.prepare('INSERT INTO leads(name,email,company,message,created_at) VALUES (?,?,?,?,?)');
-const html=readFileSync(join(root,'public','index.html'));
 const spec=JSON.parse(readFileSync(join(root,'site.json'),'utf8'));
+const pageFiles=new Map((spec.pages||[{slug:'/'}]).map(page=>[page.slug,join(root,'public',page.slug==='/'?'index.html':page.slug.slice(1)+'/index.html')]));
 const port=Number(process.env.PORT||3100);
 if(!Number.isInteger(port)||port<0||port>65535){console.error('PORT must be an integer from 0 to 65535.');db.close();process.exit(1)}
 const server=createServer(async(req,res)=>{
@@ -249,7 +254,7 @@ const server=createServer(async(req,res)=>{
   let url;try{url=new URL(req.url,'http://localhost')}catch{return send(400,{error:'Invalid URL.'})}
   try{
     if(['GET','HEAD'].includes(req.method)){
-      if(url.pathname==='/')return send(200,html,'text/html; charset=utf-8');
+      const pagePath=url.pathname==='/'?'/':url.pathname.replace(/\/$/,'');if(pageFiles.has(pagePath))return send(200,readFileSync(pageFiles.get(pagePath)),'text/html; charset=utf-8');
       if(url.pathname==='/api/health'){db.prepare('SELECT 1').get();return send(200,{status:'ok',database:'connected',runtime:'local-node'})}
       if(url.pathname==='/api/site')return send(200,{brand:spec.brand,tagline:spec.tagline,services:spec.services});
       return send(404,{error:'Not found.'});
@@ -281,7 +286,7 @@ export function createProjectFiles(input) {
   const spec=normalizeSpec(input);
   const readme=`# ${spec.brand} — local website project\n\nThis project contains an original responsive frontend and a working local Node.js + SQLite backend. It is generated from your approved website specification. No deployment, cloud account or package installation is required.\n\n## Run\n\nRequires Node.js 24 or later. From this folder:\n\n\`\`\`sh\nnode server.mjs\n\`\`\`\n\nOpen http://127.0.0.1:3100 . Keep the terminal open. Press Ctrl+C to stop. On macOS you can also double-click start.command.\n\nUse \`PORT=3101 node server.mjs\` if the default port is occupied.\n\n## Files\n\n- \`public/index.html\`: full responsive site, styles, original CSS artwork, mobile navigation, FAQ and contact form. All assets run locally.\n- \`server.mjs\`: HTTP server, input validation and parameterized SQLite writes.\n- \`site.json\`: editable website specification. Editing it does not automatically rebuild the rendered HTML; change the project through BizNova and export again, or edit public/index.html directly.\n- \`data/site.sqlite\`: created automatically; stores submitted enquiries. Back up the entire data folder after stopping the server.\n\n## Backend\n\n- \`GET /api/health\`: local database health.\n- \`GET /api/site\`: public business content.\n- \`POST /api/leads\`: save an enquiry. JSON fields: name, email, company (optional), message.\n\nThe contact form writes to the database; it does not send email. The server only listens on this computer. Before offering it publicly, add identity/access controls where needed, spam protection, email delivery and appropriate privacy content. No user accounts, payments or live integrations are included. Copywriting is a starting point: verify business claims, contact details and service descriptions before sharing.\n`;
   return [
-    {path:'public/index.html',content:renderSite(spec)},
+    ...(spec.pages?documentPageFiles(spec,{escape,arrow,mark:spec.pageType==='toy-store'?toyMark:mark,clientScript,toyArtwork,toyCollectionArt}):[{path:'public/index.html',content:renderSite(spec)}]),
     {path:'server.mjs',content:generatedServer},
     {path:'site.json',content:JSON.stringify(spec,null,2)+'\n'},
     {path:'package.json',content:JSON.stringify({name:'biznova-generated-website',version:'1.0.0',private:true,type:'module',engines:{node:'>=24'},scripts:{start:'node server.mjs'}},null,2)+'\n'},

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { normalizeSpec, renderSite } from '../local/site-generator.mjs';
 import { runWebsiteAgent, WEBSITE_AGENT_TOOLS, WebsiteAgentProviderError } from '../local/studio-agent.mjs';
+import { DOCUMENT_TOOLS } from '../local/site-document.mjs';
+import { PLANNING_TOOLS } from '../local/site-planning.mjs';
 import { STYLE_IDS } from '../lib/studio-styles.ts';
 
 const site = () => normalizeSpec({ brand: 'Northstar', accent: '#123456' });
@@ -362,7 +364,7 @@ test('Invalid current specifications fail before a model call instead of being r
 });
 
 test('Function definitions use standard OpenAI tool envelopes with closed JSON object schemas', () => {
-  assert.deepEqual(WEBSITE_AGENT_TOOLS.map(tool => tool.function.name), ['list_styles', 'read_site', 'update_section', 'update_service', 'update_theme', 'update_navigation', 'validate_site', 'render_preview']);
+  assert.deepEqual(WEBSITE_AGENT_TOOLS.map(tool => tool.function.name), [...PLANNING_TOOLS,...DOCUMENT_TOOLS].map(t=>t.function.name).concat(['list_styles','read_site','update_section','update_service','update_theme','update_navigation','validate_site','render_preview']));
   for (const tool of WEBSITE_AGENT_TOOLS) {
     assert.equal(tool.type, 'function');
     assert.equal(tool.function.parameters.type, 'object');

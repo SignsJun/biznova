@@ -1,6 +1,6 @@
 import { STYLE_IDS, STYLE_CATALOG } from '../lib/studio-styles.ts';
 import { createInitialSpec, normalizeSpec, DEFAULT_SPEC } from './site-generator.mjs';
-import { runWebsiteAgent, WEBSITE_AGENT_TOOLS, WebsiteAgentProviderError } from './studio-agent.mjs';
+import { runWebsiteAgent, WEBSITE_AGENT_TOOLS, WebsiteAgentProviderError, AUTONOMOUS_LIMITS } from './studio-agent.mjs';
 
 const styles=[...STYLE_IDS];
 const initialSummary='Created a website draft for your business and selected design direction, including navigation, a hero, services, an about section and a working contact form. You can preview it, save revisions and export a complete Node.js + SQLite project. This workspace currently uses local design presets and editing rules; no language model is connected.';
@@ -27,8 +27,8 @@ function modelSettings() {
 export function modelConfig() {
   const {mode,model,error}=modelSettings();
   const labels={local:'Local build engine',ollama:'Local Ollama model',deepseek:'DeepSeek API'};
-  const notes={local:'No language model is connected. Design presets and explicit copy, color and style rules are available; general AI coding is not enabled.',ollama:'Requests are sent to your local Ollama service. The model produces structured website content only.',deepseek:'Requests are sent to the official DeepSeek API. The server keeps the API key private; new websites use structured English content; revisions let the model select scoped tools and observe their results before saving.'};
-  return {mode,label:error?'Model configuration required':labels[mode],model,configured:!error,styles,styleCatalog:STYLE_CATALOG,capabilities:['website-preview','versions','fullstack-export','contact-database',...(mode==='deepseek'?['tool-calling','scoped-edits','agent-run-history']:[])],...(mode==='deepseek'?{agent:{mode:'tool-calling',appliesTo:'revisions',tools:WEBSITE_AGENT_TOOLS.map(t=>t.function.name),maxModelTurns:6,maxToolCalls:12}}:{}),note:error||notes[mode]};
+  const notes={local:'No language model is connected. Design presets and explicit copy, color and style rules are available; general AI coding is not enabled.',ollama:'Requests are sent to your local Ollama service. The model produces structured website content only.',deepseek:'Requests are sent to the official DeepSeek API. The server keeps the API key private; new websites and revisions use planning, composable pages and sections, tool calling and structural acceptance checks before saving.'};
+  return {mode,label:error?'Model configuration required':labels[mode],model,configured:!error,styles,styleCatalog:STYLE_CATALOG,capabilities:['website-preview','versions','fullstack-export','contact-database',...(mode==='deepseek'?['tool-calling','scoped-edits','agent-run-history','multi-page','section-composition','planning','structural-checks']:[])],...(mode==='deepseek'?{agent:{mode:'tool-calling',appliesTo:'creation-and-revisions',tools:WEBSITE_AGENT_TOOLS.map(t=>t.function.name),maxModelTurns:AUTONOMOUS_LIMITS.turns,maxToolCalls:AUTONOMOUS_LIMITS.calls}}:{}),note:error||notes[mode]};
 }
 
 // Present previously generated system messages in English without rewriting
@@ -150,17 +150,18 @@ async function generateWithDeepSeek(previous,message,style,model) {
   try {return parseModelSpec(choice.message?.content,{secret:(process.env.DEEPSEEK_API_KEY||'').trim()});}catch(error){throw configurationError(error.message);}
 }
 async function completeDeepSeekTools(messages,tools,{signal},model) {
-  const choice=await requestDeepSeekResponse({model,stream:false,max_tokens:2048,thinking:{type:'disabled'},tool_choice:'auto',tools,messages},{signal});
+  const choice=await requestDeepSeekResponse({model,stream:false,max_tokens:5000,thinking:{type:'disabled'},tool_choice:'auto',tools,messages},{signal});
   const message=choice.message;
   if(!message||message.role!=='assistant')throw configurationError('DeepSeek returned an invalid tool response. Your saved website is unchanged.');
   return {role:'assistant',content:message.content??null,...(message.tool_calls?{tool_calls:message.tool_calls}:{})};
 }
-export async function generateSpec({prompt,style,name,current,scope='auto'}) {
+export async function generateSpec({prompt,style,name,current,scope='auto',history=[],autonomous=true}) {
   const config=modelConfig(),settings=modelSettings();
   if(settings.error)throw configurationError(settings.error);
   if(scope!=='auto'&&config.mode!=='deepseek')throw configurationError('Locked edit scopes require DeepSeek tool calling. Select Auto scope or configure DeepSeek.');
-  if(config.mode==='deepseek'&&current){
-    const result=await runWebsiteAgent({current,request:prompt,style,scope,complete:(messages,tools,options)=>completeDeepSeekTools(messages,tools,options,config.model)});
+  if(config.mode==='deepseek'&&(current||autonomous)){
+    const seed=current||normalizeSpec({...createInitialSpec(prompt,style),...(name?{brand:name}:{}),nav:[{label:'Home',href:'/'}],pages:[{id:'home',slug:'/',title:'Home',sections:[]}]});
+    const result=await runWebsiteAgent({current:seed,request:prompt,style,scope,autonomous,initial:!current,history,complete:(messages,tools,options)=>completeDeepSeekTools(messages,tools,options,config.model)});
     return {...result,engine:'deepseek',summary:`DeepSeek tool calling: ${result.summary}`,agentRun:{...result.agentRun,model:config.model}};
   }
 

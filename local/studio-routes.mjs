@@ -83,7 +83,7 @@ export async function handleStudioRequest(request,response,{db}) {
     const [,id,action]=match,project=getProject(db,id);if(!project)fail(404,'Project not found.');
     if(!action&&read){send(200,projectForClient(project));return true;}
     if(action==='runs'&&read){send(200,{runs:listAgentRuns(db,id)});return true;}
-    if(action==='preview'&&read){send(200,renderSite(project.spec,{preview:true,projectId:id}),'text/html; charset=utf-8');return true;}
+    if(action==='preview'&&read){send(200,renderSite(project.spec,{preview:true,projectId:id,page:url.searchParams.get('page')||'/'}),'text/html; charset=utf-8');return true;}
     if(action==='files'&&read){send(200,{files:createProjectFiles(project.spec)});return true;}
     if(action==='export'&&read){
       const archive=createZip(createProjectFiles(project.spec));const slug=project.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'biznova-website';
@@ -93,7 +93,7 @@ export async function handleStudioRequest(request,response,{db}) {
       if(project.messages.length>=500)fail(409,'This conversation is full. Create a new project to continue.');
       const body=await readBody(request);allowed(body,['message','style','scope']);const message=text(body.message,'message',6000),style=validateStyle(body.style),scope=body.scope??'auto';
       if(!['auto','hero','services','about','footer','contact','brand','theme','navigation'].includes(scope))fail(400,'Unknown edit scope.');
-      const result=await generateSpec({prompt:message,style,scope,current:project.spec});
+      const result=await generateSpec({prompt:message,style,scope,current:project.spec,history:project.messages});
       send(200,{...projectForClient(reviseProject(db,project,{message,...result})),engine:result.engine});return true;
     }
     if(action==='restore'&&!read){
@@ -113,7 +113,7 @@ export async function handleStudioRequest(request,response,{db}) {
   } catch(error){
     const status=Number.isInteger(error.status)?error.status:500;
     if(status>=500)console.error('Studio request failed:',error.message);
-    if(!response.headersSent)send(status,{error:status===500?'Unable to complete this action. Please try again.':error.message});
+    if(!response.headersSent)send(status,{error:status===500?'Unable to complete this action. Please try again.':error.message,...(error.agentRun?{agentRun:error.agentRun}:{})});
     else response.destroy();
   }
   return true;

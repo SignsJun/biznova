@@ -143,6 +143,18 @@ Open http://127.0.0.1:3000/#studio or click **AI Chatbot** in the top navigation
 5. **Tools** displays real tool calls, arguments, results, selected scope, changed fields and model-turn counts. **Project files** displays the generated source. **Versions** restores earlier versions. **Backend & Data** displays inquiries submitted through the preview's contact form.
 6. Click **Export project** to download a ZIP. Extract it, open the `website` directory, and run `node server.mjs` using Node.js 24+. Open http://127.0.0.1:3100. Exported sites require no `npm install` and include `POST /api/leads` and a `data/site.sqlite` database. Edit `public/index.html` to customize the exported frontend independently.
 
+### Autonomous pages and components
+
+With DeepSeek configured, describe the website goal and required pages. The model plans and uses tools for new builds as well as revisions. The **Pages** tab displays the saved page tree and ordered components; preview selectors and internal navigation open the actual page route. Structure actions prepare precise conversation instructions for you to submit.
+
+Supported components are hero, features, content, FAQ, CTA, contact, pricing, gallery and metrics. Each has compatible choices among split, centered, grid, list, alternating and banner layouts. Sites support up to 8 pages and 12 sections per page. Internal routes use `/`, `/projects` and similar one-level paths; a contact component retains the working Node.js/SQLite enquiry backend. Pricing and metrics must come from the user's supplied facts.
+
+New builds record required pages/section types and visual notes with `plan_site`. `inspect_site` renders all pages and checks links and component hierarchy against that plan. Failed checks are returned to the model for repair. `finish_site` distinguishes completed, partial and unsupported work and delivers immediately after its tool batch is complete; a redundant model reply is not required. Budget warnings near the limit tell the model to finish remaining edits and report an honest outcome. The **Tools** tab retains the plan, checks, outcome and actual tool calls. These are structural/HTML checks, **not automated screenshots or browser visual inspection**. Rendered previews should still be reviewed for visual quality.
+
+Existing single-page projects remain unchanged until a structure tool migrates their home content. Auto scope is required for page/component structure changes; existing locked Hero/About edits synchronize with the visible home component. Versions retain the complete page tree. Exports include `public/index.html`, `public/<slug>/index.html` for additional pages, and the standalone server serves those actual routes without dependencies.
+
+The builder has deliberate boundaries: it composes supported components and their layouts; it does not provide arbitrary source-file editing, new backend business APIs, accounts, payments or deployment. A bounded run is staged atomically and can be restored through versions; background job continuation and browser feedback tools remain future work.
+
 ### Nine design directions
 
 Each direction changes composition, navigation, hero artwork, content layout and footer treatment. Existing site copy, page type and accent remain unchanged when applying a style. Browsing previews does not save changes or call the model. The DeepSeek agent can inspect the same catalog with `list_styles` and apply a chosen ID with `update_theme`.
@@ -175,16 +187,23 @@ BIZNOVA_DEEPSEEK_MODEL=deepseek-flash
 
 The standalone CLI loads this file automatically on startup. Keep its permissions restricted to your account (`chmod 600 .env.local` on macOS/Linux). `.env.local` is ignored by Git and must be excluded from every delivery archive. A recipient should configure their own key. Existing shell environment variables take precedence over the file.
 
-Restart with `npm run local:start`, then open Website Agent. DeepSeek requests use the official `https://api.deepseek.com/chat/completions` endpoint. Initial builds use JSON output. Revisions use multi-round tool calling: the model selects functions and receives their results before deciding the next action. Requests send the website brief and relevant structured website fields to DeepSeek; the workspace database, collected contact records, and unrelated files are not uploaded. The API key is used only in the HTTPS authorization header. Errors are sanitized, and paid generation requests are not retried automatically.
+Restart with `npm run local:start`, then open Website Agent. DeepSeek requests use the official `https://api.deepseek.com/chat/completions` endpoint. New builds and revisions use multi-round tool calling: the model selects functions and receives their results before deciding the next action. Requests send the website brief and relevant structured website fields to DeepSeek; the workspace database, collected contact records, and unrelated files are not uploaded. The API key is used only in the HTTPS authorization header. Errors are sanitized, and paid generation requests are not retried automatically.
 
 The default documented model is `deepseek-flash`; `BIZNOVA_DEEPSEEK_MODEL` can select another model available to your account. Model output is strictly validated and rendered through the nine original design systems. The model customizes website content and the supported structure, but this is not an unrestricted code-execution agent: authentication, payments, commerce and arbitrary layouts require additional implementation. Failed model requests leave saved projects and versions unchanged.
 
 ### Tool-calling architecture
 
-The workspace frontend uses React and TypeScript. The local backend is a Node.js HTTP server with SQLite. The revision agent is a bounded ReAct-style loop implemented directly in JavaScript using DeepSeek tool calls; it does not depend on LangChain or LangGraph. The model selects tools autonomously within the supported website schema. Initial website creation still uses a structured generation workflow.
+The workspace frontend uses React and TypeScript. The local backend is a Node.js HTTP server with SQLite. The website agent is a bounded ReAct-style loop implemented directly in JavaScript using DeepSeek tool calls; it does not depend on LangChain or LangGraph. The model selects tools autonomously within the supported website schema. New DeepSeek builds now start with a plan, compose actual pages and sections, inspect the result and report an explicit outcome. Recent project messages are included as bounded context.
 
 | Tool | Action |
 | --- | --- |
+| `plan_site` | Record the goal, design notes, implementation steps and required pages/sections |
+| `list_sections` | Inspect component types and compatible layouts |
+| `add_page`, `update_page`, `remove_page` | Manage pages and their routes |
+| `add_section`, `update_page_section` | Add components or change their content, type and layout |
+| `move_section`, `remove_section` | Reorder or remove page components |
+| `inspect_site` | Check page hierarchy, internal links, declared requirements and rendering |
+| `finish_site` | Report completed, partial or unsupported with an explanation |
 | `list_styles` | Inspect nine original style directions, their layout traits and default colors |
 | `read_site` | Read the current staged website or one section |
 | `update_section` | Patch supplied hero, about, footer, contact or brand fields |
@@ -194,11 +213,11 @@ The workspace frontend uses React and TypeScript. The local backend is a Node.js
 | `validate_site` | Validate the staged website schema |
 | `render_preview` | Render HTML and return its size and fingerprint; no browser inspection |
 
-This follows DeepSeek's [tool-calling protocol](https://api-docs.deepseek.com/guides/tool_calls/). Each request allows at most 6 model turns and 12 tool calls, with a shared 120-second limit. Invalid tool arguments become observations the model can correct. Changes are staged in memory, validated, then saved atomically with their version and tool trace. Failed runs leave the saved website unchanged; concurrent edits use revision checks. Successful runs with no actual changes retain the current version. **Versions** can restore prior content.
+This follows DeepSeek's [tool-calling protocol](https://api-docs.deepseek.com/guides/tool_calls/). Each request allows at most 48 model turns and 128 tool calls, with a shared 600-second limit. Invalid tool arguments become observations the model can correct. Changes are staged in memory, validated, then saved atomically with their version and tool trace. Failed runs leave the saved website unchanged; concurrent edits use revision checks. Successful runs with no actual changes retain the current version. **Versions** can restore prior content.
 
 An explicit `pageType: "toy-store"` selects an original building-toy storefront introduction with collection illustrations and inquiry-oriented copy. The model can select this layout using `update_theme` in Auto or Theme scope. Existing projects without a page type keep their original layout. This introduction layout includes no cart, checkout, prices, inventory or payment processing.
 
-These tools patch supported website data rendered by the existing design systems. They do not provide arbitrary file editing, shell execution, package installation, or unrestricted React component generation. Exported websites currently use standalone HTML/CSS/JavaScript with a Node.js backend and SQLite.
+These tools build and modify a declarative page/component tree, rendered by the existing design systems. They do not provide arbitrary file editing, shell execution, package installation, or unrestricted React component generation. Exported websites currently use standalone HTML/CSS/JavaScript with a Node.js backend and SQLite.
 
 To explicitly use the offline builder without removing your key:
 

@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateSpec, modelConfig } from '../local/studio-model.mjs';
+import { generateSpec as generateProviderSpec, modelConfig } from '../local/studio-model.mjs';
 import { DEFAULT_SPEC, normalizeSpec } from '../local/site-generator.mjs';
 
+const generateSpec=args=>generateProviderSpec({...args,autonomous:!!args.current});
 const fakeKey='sk-unit-test-not-a-real-key';
 const envKeys=['DEEPSEEK_API_KEY','BIZNOVA_MODEL_PROVIDER','BIZNOVA_DEEPSEEK_MODEL','BIZNOVA_OLLAMA_MODEL','BIZNOVA_OLLAMA_URL','BIZNOVA_DEEPSEEK_URL'];
 const brief={prompt:'Build an English website for a design practice.',style:'editorial'};
