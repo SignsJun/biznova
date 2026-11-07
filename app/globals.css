@@ -28,6 +28,7 @@
 .store-products img { width: 92px; height: 135px; object-fit: contain; border-radius: 9px; }
 .store-products strong { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }
 .store-products button > span { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
+.website-page ~ .modal { inset: 0; margin: auto; }
 @media (max-width: 560px) {
   .store-products { grid-template-columns: 1fr; }
 }
