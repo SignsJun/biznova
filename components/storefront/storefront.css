@@ -1,0 +1,352 @@
+.nova-store {
+  --nova-ink: #192822;
+  --nova-muted: #4f6056;
+  --nova-paper: #fbfaf5;
+  --nova-soft: #efefe6;
+  --nova-line: #d9ded3;
+  --nova-leaf: #dcebb5;
+  --nova-deep: #213c30;
+  --nova-radius: 22px;
+  color: var(--nova-ink);
+  padding-bottom: 30px;
+}
+
+.dark .nova-store {
+  --nova-ink: #f1f3e9;
+  --nova-muted: #b9c5b9;
+  --nova-paper: #252e29;
+  --nova-soft: #2e3a33;
+  --nova-line: #435249;
+  --nova-deep: #16372b;
+}
+
+.nova-store-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 62px;
+  padding: 8px 0 17px;
+  background: color-mix(in srgb, var(--nova-paper) 95%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.nova-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: .15em;
+  white-space: nowrap;
+}
+
+.nova-store-links { display: flex; gap: 16px; margin-left: auto; }
+.nova-store-links button { color: var(--nova-muted); font-size: 13px; font-weight: 600; padding: 8px 4px; }
+.nova-store-links button:hover, .nova-product-heading button:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+.nova-bag-button, .nova-primary, .nova-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background .18s, color .18s, filter .18s;
+}
+
+.nova-bag-button, .nova-secondary { border: 1px solid var(--nova-line); background: var(--nova-paper); }
+.nova-bag-button:hover, .nova-secondary:hover { background: var(--nova-soft); }
+.nova-bag-button > span {
+  min-width: 23px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--nova-leaf);
+  color: #192822;
+  text-align: center;
+}
+.nova-primary { background: var(--nova-leaf); color: #192822; }
+.nova-primary:hover { filter: brightness(.92); }
+.nova-full { width: 100%; justify-content: space-between; margin-top: 14px; }
+
+.nova-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  min-height: 490px;
+  overflow: hidden;
+  border-radius: var(--nova-radius);
+  background: var(--nova-deep);
+  color: #f4f5e9;
+}
+
+.nova-hero-copy { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: clamp(26px, 5vw, 80px); }
+.nova-kicker {
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+.nova-hero .nova-kicker { color: #dcebb5; }
+.nova-hero .nova-kicker span { margin-left: 8px; color: #d5dfd1; }
+.nova-hero h1, .nova-store h2:not(.nova-dialog-heading h2) {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  letter-spacing: -.055em;
+}
+
+.nova-hero h1 { margin: 20px 0 18px; font-size: clamp(48px, 6.45vw, 100px); line-height: .95; }
+.nova-hero-copy > p:not(.nova-kicker) { max-width: 34ch; color: #e1e8dd; font-size: 16px; line-height: 1.55; }
+.nova-hero .nova-primary { margin-top: 24px; padding-inline: 20px; }
+.nova-hero-media { position: relative; min-width: 0; background: #303b35; }
+.nova-hero-media img { position: absolute; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+
+.nova-collection { margin: clamp(40px, 7vw, 94px) 0 clamp(44px, 7vw, 94px); }
+.nova-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 22px;
+  margin-bottom: 22px;
+}
+
+.nova-section-heading h2, .nova-story h2, .nova-questions h2 {
+  margin-top: 8px;
+  font-size: clamp(38px, 5.1vw, 68px);
+  line-height: .99;
+  scroll-margin-top: 76px;
+}
+
+.nova-section-heading h2:focus, .nova-story h2:focus { outline: none; }
+.nova-section-heading > p { max-width: 34ch; color: var(--nova-muted); font-size: 15px; line-height: 1.5; }
+
+.nova-catalog-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0;
+  border-block: 1px solid var(--nova-line);
+}
+.nova-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.nova-catalog-inputs { display: grid; grid-template-columns: minmax(120px, 170px) minmax(125px, 156px); gap: 7px; }
+.nova-filters button {
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--nova-muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+.nova-filters button:hover { border-color: var(--nova-line); }
+.nova-filters button[aria-pressed="true"] { color: #192822; background: var(--nova-leaf); }
+.nova-catalog-search, .nova-catalog-inputs select {
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid var(--nova-line);
+  border-radius: 9px;
+  background: var(--nova-paper);
+  color: var(--nova-ink);
+  font-size: 12px;
+}
+.nova-catalog-search { display: flex; align-items: center; gap: 7px; }
+.nova-catalog-search input { width: 100%; min-width: 0; border: 0; background: transparent; color: inherit; outline: none; }
+.nova-catalog-inputs select { width: 100%; min-width: 0; }
+.nova-catalog-search input::placeholder { color: var(--nova-muted); }
+.nova-catalog-search:focus-within { outline: 2px solid #979ad0; outline-offset: 2px; }
+.nova-results { display: flex; justify-content: space-between; margin: 12px 0; color: var(--nova-muted); font-size: 12px; }
+
+.nova-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; }
+.nova-product {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--nova-line);
+  border-radius: 18px;
+  background: var(--nova-paper);
+}
+
+.nova-product-media {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 11px;
+  background: var(--nova-soft);
+  text-align: left;
+}
+
+.nova-product-media img { display: block; width: 100%; height: 100%; object-fit: contain; transition: transform .28s; }
+.nova-product-media:hover img { transform: scale(1.035); }
+.nova-product-media > span, .nova-product-media > svg {
+  position: absolute;
+  top: 11px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #fcfcf3;
+  color: #192822;
+}
+.nova-product-media > span { left: 11px; font-size: 10px; font-weight: 700; }
+.nova-product-media > svg { right: 11px; box-sizing: content-box; padding: 6px; }
+.nova-product-copy { padding: 13px 9px 8px; }
+.nova-product-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.nova-product-heading h3 { font-size: clamp(15px, 1.8vw, 23px); font-weight: 700; letter-spacing: -.035em; }
+.nova-product-heading h3 button { text-align: left; }
+.nova-product-heading strong { flex-shrink: 0; font-size: 15px; white-space: nowrap; }
+.nova-product-copy > p { margin-top: 5px; color: var(--nova-muted); font-size: 12px; line-height: 1.5; }
+.nova-product-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 12px;
+  min-height: 42px;
+  border: 1px solid var(--nova-line);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.nova-product-add:hover { background: var(--nova-soft); }
+
+.nova-story {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) 2fr;
+  gap: 22px;
+  padding: clamp(24px, 5.5vw, 76px);
+  border: 1px solid var(--nova-line);
+  border-radius: var(--nova-radius);
+  background: var(--nova-paper);
+}
+.nova-story h2 { margin-top: 0; }
+.nova-story div > p { max-width: 52ch; margin-top: 16px; color: var(--nova-muted); font-size: 16px; line-height: 1.65; }
+.nova-text-button { display: inline-flex; align-items: center; gap: 6px; padding-block: 7px; font-size: 12px; font-weight: 750; }
+.nova-text-button:hover { text-decoration: underline; text-underline-offset: 4px; }
+.nova-story .nova-text-button { margin-top: 15px; }
+
+.nova-questions { display: grid; grid-template-columns: 1fr 1.25fr; gap: 24px; margin: clamp(40px, 7vw, 94px) 0; }
+.nova-questions h2 { font-size: clamp(36px, 4.1vw, 58px); }
+.nova-questions details { border-bottom: 1px solid var(--nova-line); }
+.nova-questions details:first-child { border-top: 1px solid var(--nova-line); }
+.nova-questions summary { padding: 14px 0; font-size: 14px; font-weight: 700; cursor: pointer; }
+.nova-questions details p { padding: 0 6px 16px 0; color: var(--nova-muted); font-size: 13px; line-height: 1.6; }
+.nova-store .nova-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 20px 0 0;
+  border-top: 1px solid var(--nova-line);
+  color: var(--nova-muted);
+  font-size: 11px;
+}
+
+.nova-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(510px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  overflow: auto;
+  border: 1px solid var(--nova-line);
+  border-radius: var(--nova-radius);
+  background: var(--nova-paper);
+  color: var(--nova-ink);
+  box-shadow: 0 22px 70px #13271f50;
+}
+.nova-dialog-wide { width: min(850px, calc(100% - 24px)); }
+.nova-dialog::backdrop { background: #14271eb0; backdrop-filter: blur(3px); }
+.nova-dialog-inner { padding: clamp(16px, 3vw, 26px); }
+.nova-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+.nova-dialog-heading h2 { font-size: 25px; font-weight: 700; letter-spacing: -.035em; }
+.nova-icon {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--nova-soft);
+}
+.nova-icon:hover { filter: brightness(.92); }
+.nova-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: clamp(16px, 4vw, 34px); }
+.nova-detail > img { display: block; width: 100%; max-height: 430px; aspect-ratio: 1; object-fit: contain; border-radius: 13px; background: var(--nova-soft); }
+.nova-detail-price { margin-top: 10px; font-size: 23px; font-weight: 750; }
+.nova-detail-description { margin: 11px 0 14px; color: var(--nova-muted); font-size: 14px; line-height: 1.55; }
+.nova-detail dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; margin: 0 0 15px; font-size: 12px; }
+.nova-detail dt { font-weight: 700; }
+.nova-detail dd { margin: 0; color: var(--nova-muted); }
+.nova-detail-actions, .nova-line-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.nova-detail-actions { margin-bottom: 5px; }
+.nova-quantity { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; border: 1px solid var(--nova-line); border-radius: 999px; font-size: 13px; }
+.nova-quantity button { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; }
+.nova-quantity button:hover:not(:disabled) { background: var(--nova-soft); }
+.nova-quantity button:disabled { opacity: .4; }
+.nova-quantity span { min-width: 20px; text-align: center; }
+.nova-cart-lines, .nova-order-lines { margin: 0; padding: 0; list-style: none; }
+.nova-cart-lines li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--nova-line); font-size: 13px; }
+.nova-cart-lines img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
+.nova-cart-lines p { margin-top: 4px; color: var(--nova-muted); font-size: 11px; }
+.nova-line-actions { margin-top: 7px; }
+.nova-line-actions > button { padding: 8px 4px; color: var(--nova-muted); font-size: 11px; text-decoration: underline; }
+.nova-order-lines li { display: flex; justify-content: space-between; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--nova-line); font-size: 13px; }
+.nova-order-lines small { display: block; margin-top: 3px; color: var(--nova-muted); }
+.nova-subtotal { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; font-size: 15px; }
+.nova-fineprint, .nova-dialog-notice { margin-top: 8px; color: var(--nova-muted); font-size: 12px; line-height: 1.45; }
+.nova-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 36px);
+  padding: 13px 16px;
+  border-radius: 12px;
+  background: var(--nova-deep);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 7px 24px #1b332d38;
+}
+.nova-empty { display: grid; justify-items: center; gap: 12px; padding: 35px 10px; color: var(--nova-muted); text-align: center; }
+.nova-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@media (max-width: 950px) {
+  .nova-hero { min-height: 400px; }
+  .nova-catalog-controls { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 720px) {
+  .nova-hero { grid-template-columns: 1fr; min-height: 0; }
+  .nova-hero-media { aspect-ratio: 4 / 3; }
+  .nova-section-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .nova-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .nova-story, .nova-questions { grid-template-columns: 1fr; gap: 18px; }
+}
+@media (max-width: 520px) {
+  .nova-store-bar { gap: 9px; }
+  .nova-store-links { gap: 5px; }
+  .nova-store-links button { font-size: 11px; }
+  .nova-bag-button { gap: 5px; padding-inline: 8px; font-size: 11px; }
+  .nova-wordmark { font-size: 11px; letter-spacing: .09em; }
+  .nova-catalog-inputs { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nova-hero h1 { font-size: clamp(45px, 13vw, 64px); }
+  .nova-product-heading { display: block; }
+  .nova-product-copy { padding-inline: 4px; }
+  .nova-product-copy > p { min-height: 36px; font-size: 11px; }
+  .nova-product-media > span { left: 6px; top: 6px; }
+  .nova-product-media > svg { right: 6px; top: 6px; width: 13px; height: 13px; }
+  .nova-detail { grid-template-columns: 1fr; }
+  .nova-detail > img { max-height: 35dvh; }
+  .nova-dialog-heading h2 { font-size: 22px; }
+}
+@media (max-width: 360px) {
+  .nova-store-links button:first-child { display: none; }
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import WebsiteStudio from '@/components/studio/website-studio';
+import Storefront from '@/components/storefront/storefront';
 
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Sun, Moon, Bell, Search, SlidersHorizontal, CalendarDays, ChartNoAxesCombined, Maximize, X, ArrowUpRight, Download, ChevronRight, Check, RefreshCw, ArrowLeft, Info } from 'lucide-react';
@@ -105,7 +106,7 @@ export default function Dashboard() {
         ))}
         <button disabled title="Analytics is planned for a later phase">Analytics</button>
       </nav>
-      <div className="search-wrap"><label className="search-box"><input aria-label="Search products or platforms" placeholder="Search Options" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}}/>{search?<button aria-label="Clear search" onClick={()=>setSearch('')}><X size={15}/></button>:<Search size={16}/>}</label>{query&&<div className="search-results"><small>PRODUCTS & PLATFORMS</small>{searchProducts.map(p=><button key={p.id} onClick={()=>{open(`product:${p.id}`);setSearch('');}}><img src={p.image} alt=""/><span>{p.name}</span><ChevronRight size={14}/></button>)}{searchPlatforms.map(p=><button key={p.id} onClick={()=>{setFilters(f=>({...f,platform:p.id}));setSearch('');if(workspace!=='dashboard')window.location.hash='dashboard';}}><PlatformIcon id={p.id}/><span>{p.name}</span><ChevronRight size={14}/></button>)}{!searchProducts.length&&!searchPlatforms.length&&<p>No results for “{search}”</p>}</div>}</div>
+      <div className="search-wrap"><label className="search-box"><input aria-label={workspace==='website' ? 'Search storefront' : 'Search products or platforms'} placeholder={workspace==='website' ? 'Search drinkware' : 'Search Options'} value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');if(e.key==='Enter'&&workspace==='website'){const collection=document.getElementById('nova-collection');collection?.focus();collection?.scrollIntoView({block:'start'});}}}/>{search?<button aria-label="Clear search" onClick={()=>setSearch('')}><X size={15}/></button>:<Search size={16}/>}</label>{query&&workspace!=='website'&&<div className="search-results"><small>PRODUCTS & PLATFORMS</small>{searchProducts.map(p=><button key={p.id} onClick={()=>{open(`product:${p.id}`);setSearch('');}}><img src={p.image} alt=""/><span>{p.name}</span><ChevronRight size={14}/></button>)}{searchPlatforms.map(p=><button key={p.id} onClick={()=>{setFilters(f=>({...f,platform:p.id}));setSearch('');if(workspace!=='dashboard')window.location.hash='dashboard';}}><PlatformIcon id={p.id}/><span>{p.name}</span><ChevronRight size={14}/></button>)}{!searchProducts.length&&!searchPlatforms.length&&<p>No results for “{search}”</p>}</div>}</div>
       <div className="account-tools" key={workspace}>
         <IconButton label={dark?'Switch to light theme':'Switch to dark theme'} onClick={toggleTheme}>
           {dark?<Moon size={18}/>:<Sun size={18}/>}
@@ -124,24 +125,7 @@ export default function Dashboard() {
       </div>
     </header>
     {workspace==='studio' ? <WebsiteStudio/> : workspace==='website' ?
-      <main className="main-content website-page">
-        <div className="page-heading"><h1>Website</h1></div>
-        <section className="store-intro" aria-labelledby="store-title">
-          <span>NOVA HOME · THE EVERYDAY COLLECTION</span>
-          <h2 id="store-title">Good things. For every day.</h2>
-          <p>A preview of the products behind your growth.</p>
-        </section>
-        <section className="store-products" aria-label="Everyday collection">
-          {PRODUCTS.map(product=>(
-            <button className="panel" key={product.id} onClick={()=>open(`product:${product.id}`)}>
-              <div><img src={product.image} alt=""/></div>
-              <strong>{product.name}<ArrowUpRight size={16}/></strong>
-              <span>{product.size} · View product details</span>
-            </button>
-          ))}
-        </section>
-        <p className="field-hint">Store preview · Demo products</p>
-      </main> :
+      <Storefront search={search} onSearchChange={setSearch}/> :
     <main className="main-content"><div className="page-heading"><div><h1>Growth Overview</h1>{(filters.platform!=='all'||filters.from!==DEFAULT_FROM||filters.to!==DEFAULT_TO)&&<div className="active-filters"><span>{rangeLabel(filters.from,filters.to)}</span><span>{PLATFORMS.find(p=>p.id===filters.platform)?.name||'All platforms'}</span><button onClick={()=>setFilters({from:DEFAULT_FROM,to:DEFAULT_TO,platform:'all'})}><X size={12}/> Reset</button></div>}</div><div className="heading-tools"><IconButton label="Filter dashboard" active={filters.platform!=='all'} onClick={()=>open('filters')}><SlidersHorizontal size={18}/></IconButton><IconButton label="Choose date range" onClick={()=>open('date')}><CalendarDays size={18}/></IconButton></div></div>
       {error?<div className="error-state" role="alert"><Info size={28}/><h2>We couldn’t load your dashboard</h2><p>{error}</p><button className="primary-button" onClick={()=>setReload(n=>n+1)}><RefreshCw size={16}/> Try again</button></div>:!data?<div className="loading-grid" role="status" aria-label="Loading dashboard"><div/><div/><div/><div/><span>Loading your business overview…</span></div>:<>
       <div className={`dashboard-grid ${loading?'refreshing':''}`} aria-busy={loading}>

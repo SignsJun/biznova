@@ -1,9 +1,9 @@
 export const DEFAULT_FROM = '2026-09-12';
 export const DEFAULT_TO = '2026-10-11';
 export const PRODUCTS = [
-  { id: 'insulated', name: 'Insulated Bottle', size: '32oz', image: '/images/insulated-bottle.png', color: '#f9f9ad', description: 'Double-wall insulation. An everyday essential that keeps drinks at just the right temperature.' },
-  { id: 'sport', name: 'Sport Bottle', size: '24oz', image: '/images/sport-bottle.png', color: '#cbcdef', description: 'Lightweight, durable and ready to go. Made for movement, from the morning commute to the next adventure.' },
-  { id: 'travel', name: 'Travel Cup', size: '350ml', image: '/images/travel-cup.png', color: '#d6d5da', description: 'Your daily ritual, made portable. A clean, simple cup for coffee wherever the day takes you.' },
+  { id: 'insulated', name: 'Insulated Bottle', size: '32oz', image: '/images/store/insulated.webp', color: '#f9f9ad', description: 'Double-wall insulation. An everyday essential that keeps drinks at just the right temperature.' },
+  { id: 'sport', name: 'Sport Bottle', size: '24oz', image: '/images/store/sport.webp', color: '#cbcdef', description: 'Lightweight, durable and ready to go. Made for movement, from the morning commute to the next adventure.' },
+  { id: 'travel', name: 'Travel Cup', size: '350ml', image: '/images/store/travel.webp', color: '#d6d5da', description: 'Your daily ritual, made portable. A clean, simple cup for coffee wherever the day takes you.' },
 ];
 export const PLATFORMS = [ { id: 'tiktok', name: 'TikTok Ads', growth: 8.2 }, { id: 'meta', name: 'Meta Reels', growth: 3.1 }, { id: 'google', name: 'Google Shopping', growth: -6.4 } ];
 export type ProductFact = { date: string; product: string; platform: string; revenue_cents: number; orders: number };

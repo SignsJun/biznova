@@ -10,29 +10,6 @@
 @media(max-width:760px){.metric.highlighted>strong{font-size:14px}.platform-row{height:73px}.activity-bars{gap:6px}}
 @media(max-width:760px){.topnav :is(a,button){padding-left:9px;padding-right:9px;min-width:0}.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.metric>strong{font-size:20px}.metric.highlighted>strong{font-size:18px}.metric>span{font-size:10px}.metric>small{font-size:9px}}
 
-.website-page .store-intro {
-  padding: clamp(24px, 5vw, 68px);
-  border-radius: var(--panel-radius);
-  background: linear-gradient(120deg, color-mix(in srgb, var(--surface), var(--yellow) 36%), color-mix(in srgb, var(--surface), var(--lavender) 42%));
-}
-.dark .website-page .store-intro {
-  background: linear-gradient(120deg, color-mix(in srgb, var(--surface), var(--yellow) 12%), color-mix(in srgb, var(--surface), var(--lavender) 22%));
-}
-.store-intro > span { font-size: 11px; font-weight: 600; letter-spacing: 1.6px; }
-.store-intro h2 { margin: 16px 0 10px; font-size: clamp(28px, 4vw, 56px); font-weight: 750; line-height: 1.1; letter-spacing: -.045em; }
-.store-intro p { font-size: 14px; }
-.store-products { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
-.store-products button { text-align: left; }
-.store-products button:hover { box-shadow: 0 5px 18px #25253818; }
-.store-products button > div { display: grid; place-items: center; min-height: 170px; margin-bottom: 14px; border-radius: 16px; background: var(--soft); }
-.store-products img { width: 92px; height: 135px; object-fit: contain; border-radius: 9px; }
-.store-products strong { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }
-.store-products button > span { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
-.website-page ~ .modal { inset: 0; margin: auto; }
-@media (max-width: 560px) {
-  .store-products { grid-template-columns: 1fr; }
-}
-
 .account-popover {
   z-index: 30;
   width: min(320px, calc(100vw - 24px));
