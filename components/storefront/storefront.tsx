@@ -67,7 +67,8 @@ function Quantity({ name, value, onChange }: { name: string; value: number; onCh
   );
 }
 
-export default function Storefront({ search, onSearchChange }: { search: string; onSearchChange: (value: string) => void }) {
+export default function Storefront() {
+  const [search, setSearch] = useState('');
   const [category, setCategory] = useState<StoreCategory>('All drinkware');
   const [sort, setSort] = useState<SortOrder>('featured');
   const [bag, setBag] = useState<Cart | null>(null);
@@ -195,7 +196,10 @@ export default function Storefront({ search, onSearchChange }: { search: string;
             ))}
           </div>
           <div className="nova-catalog-inputs">
-            <label className="nova-catalog-search"><Search size={15} aria-hidden="true"/><input type="search" value={search} onChange={event => onSearchChange(event.target.value)} aria-label="Search the collection" placeholder="Find drinkware"/></label>
+            <label className="nova-catalog-search">
+              <Search size={15} aria-hidden="true"/>
+              <input type="search" value={search} onChange={event => setSearch(event.target.value)} aria-label="Search the collection" placeholder="Search drinkware"/>
+            </label>
             <select aria-label="Sort products" value={sort} onChange={event => setSort(event.target.value as SortOrder)}>
               <option value="featured">Featured</option>
               <option value="price-asc">Price: low to high</option>
@@ -226,7 +230,7 @@ export default function Storefront({ search, onSearchChange }: { search: string;
         ) : (
           <div className="nova-empty">
             <h3>No products match your search.</h3>
-            <button className="nova-secondary" onClick={() => { setCategory('All drinkware'); onSearchChange(''); }}>Clear filters</button>
+            <button className="nova-secondary" onClick={() => { setCategory('All drinkware'); setSearch(''); }}>Clear filters</button>
           </div>
         )}
       </section>

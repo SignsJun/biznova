@@ -7,7 +7,9 @@ const aggregate=(filters=defaults)=>aggregateDashboard(records.products,records.
 test('Figma totals reconcile across cards, calendar, products and platforms',()=>{
   const d=aggregate();
   assert.equal(d.summary.revenue,18612.85);assert.equal(d.summary.orders,915);assert.equal(d.summary.adSpend,2028.6);
-  assert.equal(d.trendSummary.revenue,6869);assert.equal(d.trendSummary.orders,326);
+  assert.equal(d.trend.length,30);
+  assert.deepEqual(d.trend,d.calendar);
+  assert.deepEqual(d.trendSummary,{revenue:18612.85,orders:915});
   assert.deepEqual(d.products.map(p=>p.orders),[438,263,214]);
   assert.deepEqual(d.products.map(p=>p.revenue),[10945.62,4994.37,2672.86]);
   assert.equal(Math.round(d.calendar.reduce((a,c)=>a+c.revenue,0)*100),1861285);
@@ -24,6 +26,8 @@ test('Platform filters partition all revenue, orders and spend without loss',()=
 test('Date ranges, single days and missing data remain coherent',()=>{
   const d=aggregate({...defaults,from:'2026-10-02'});
   assert.equal(d.summary.revenue,6869);assert.equal(d.summary.orders,326);
+  assert.equal(d.trend.length,10);
+  assert.deepEqual(d.trendSummary,{revenue:6869,orders:326});
   const single=aggregate({...defaults,from:'2026-10-09',to:'2026-10-09'});
   assert.equal(single.summary.revenue,1017);assert.equal(single.summary.orders,41);assert.equal(single.calendar.length,1);
   const empty=aggregate({from:'2027-01-01',to:'2027-01-07',platform:'all'});
