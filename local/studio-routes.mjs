@@ -2,6 +2,7 @@ import { STYLE_IDS, STYLE_CATALOG } from '../lib/studio-styles.ts';
 import { createProject, getProject, initStudio, listProjects, reviseProject, saveLead, listLeads, listAgentRuns } from './studio-repository.mjs';
 import { generateSpec, modelConfig, englishStudioMessage } from './studio-model.mjs';
 import { normalizeSpec, renderSite, createProjectFiles, DEFAULT_SPEC } from './site-generator.mjs';
+import { readSiteMedia, saveSiteMedia } from './site-media.mjs';
 
 class RequestError extends Error { constructor(status,message){super(message);this.status=status;} }
 const fail=(status,message)=>{throw new RequestError(status,message);};
@@ -65,6 +66,23 @@ export async function handleStudioRequest(request,response,{db}) {
     if(!read)checkOrigin(request);
     initStudio(db);
     if(url.pathname==='/api/studio/config'&&read){send(200,{...modelConfig(),schemaVersion:1});return true;}
+    if(url.pathname==='/api/studio/media'&&!read){
+      if(request.headers['content-type']!=='image/webp')fail(415,'Upload a WebP image.');
+      const max=2*1024*1024;
+      if(Number(request.headers['content-length'])>max){request.resume();fail(413,'Images must be 2 MB or smaller.');}
+      const chunks=[];
+      let length=0;
+      for await(const chunk of request){ length+=chunk.length;if(length<=max)chunks.push(chunk); }
+      if(length>max)fail(413,'Images must be 2 MB or smaller.');
+      let name='';
+      try{name=decodeURIComponent(String(request.headers['x-image-name']||''));}catch{fail(400,'Invalid image name.');}
+      const image=saveSiteMedia(Buffer.concat(chunks),name);
+      if(!image)fail(400,'The image is not valid WebP data.');
+      send(201,image);
+      return true;
+    }
+    const media=url.pathname.match(/^\/api\/studio\/media\/assets\/([a-z][a-z0-9-]{0,63})\.webp$/);
+    if(media&&read){const image=readSiteMedia(media[1]);if(!image)fail(404,'Image not found.');send(200,image,'image/webp');return true;}
     if(url.pathname==='/api/studio/style-preview'&&read){
       const style=validateStyle(url.searchParams.get('style')||'glass'),projectId=url.searchParams.get('project');
       let sample={...DEFAULT_SPEC,brand:'Northstar',accent:STYLE_CATALOG.find(s=>s.id===style).accent};
@@ -75,7 +93,7 @@ export async function handleStudioRequest(request,response,{db}) {
       if(read){send(200,{projects:listProjects(db)});return true;}
       const body=await readBody(request);allowed(body,['prompt','name','style']);
       const prompt=text(body.prompt,'prompt',6000,{min:5}),name=text(body.name,'name',80,{required:false}),style=validateStyle(body.style)||'glass';
-      const result=await generateSpec({prompt,name,style});
+      const result=await generateSpec({prompt,name,style,designReview:true});
       send(201,{...projectForClient(createProject(db,{name,prompt,...result})),engine:result.engine});return true;
     }
     const match=url.pathname.match(/^\/api\/studio\/projects\/([a-zA-Z0-9-]{1,80})(?:\/(messages|restore|preview|export|files|leads|runs))?$/);
@@ -84,7 +102,7 @@ export async function handleStudioRequest(request,response,{db}) {
     if(!action&&read){send(200,projectForClient(project));return true;}
     if(action==='runs'&&read){send(200,{runs:listAgentRuns(db,id)});return true;}
     if(action==='preview'&&read){send(200,renderSite(project.spec,{preview:true,projectId:id,page:url.searchParams.get('page')||'/'}),'text/html; charset=utf-8');return true;}
-    if(action==='files'&&read){send(200,{files:createProjectFiles(project.spec)});return true;}
+    if(action==='files'&&read){send(200,{files:createProjectFiles(project.spec).map(file=>Buffer.isBuffer(file.content)?{path:file.path,content:`WebP image · ${file.content.length} bytes. The image is included in the project ZIP.`}:file)});return true;}
     if(action==='export'&&read){
       const archive=createZip(createProjectFiles(project.spec));const slug=project.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'biznova-website';
       response.setHeader('Content-Disposition',`attachment; filename="${slug}-fullstack.zip"`);send(200,archive,'application/zip');return true;
@@ -93,7 +111,7 @@ export async function handleStudioRequest(request,response,{db}) {
       if(project.messages.length>=500)fail(409,'This conversation is full. Create a new project to continue.');
       const body=await readBody(request);allowed(body,['message','style','scope']);const message=text(body.message,'message',6000),style=validateStyle(body.style),scope=body.scope??'auto';
       if(!['auto','hero','services','about','footer','contact','brand','theme','navigation'].includes(scope))fail(400,'Unknown edit scope.');
-      const result=await generateSpec({prompt:message,style,scope,current:project.spec,history:project.messages});
+      const result=await generateSpec({prompt:message,style,scope,current:project.spec,history:project.messages,designReview:true});
       send(200,{...projectForClient(reviseProject(db,project,{message,...result})),engine:result.engine});return true;
     }
     if(action==='restore'&&!read){

@@ -1,4 +1,6 @@
 import {STYLE_CATALOG} from '../lib/studio-styles.ts';
+import {siteMediaPath} from './site-media.mjs';
+import {catalogCss, initCatalogs, renderCatalog} from './site-catalog.mjs';
 
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeSlug=slug=>typeof slug==='string'&&/^(?:\/|\/[a-z][a-z0-9-]{0,59})$/.test(slug);
@@ -23,6 +25,32 @@ const css=String.raw`
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
 `;
 
+const photoCss = `
+.scene-photo{position:relative;overflow:hidden;padding:0;border:0;isolation:isolate;aspect-ratio:4/3}
+.scene-photo .site-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.site-photo{object-fit:cover}.item .site-photo{display:block;width:100%;aspect-ratio:4/3}
+.site-photo.focus-left{object-position:left}.site-photo.focus-right{object-position:right}
+.site-photo.focus-top{object-position:top}.site-photo.focus-bottom{object-position:bottom}
+.document-site .hero.layout-image-led.has-media{position:relative;isolation:isolate;display:grid;grid-template-columns:1fr;align-items:end;min-height:clamp(540px,65vw,730px);padding:clamp(26px,6vw,80px);margin-top:22px;margin-bottom:36px;overflow:hidden;border-radius:16px;text-align:left;color:#fff}
+.hero.layout-image-led::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,#0d1019e0,#0d10194d 72%),linear-gradient(0deg,#0d101980,transparent 75%)}
+.hero.layout-image-led .scene-photo{position:absolute;inset:0;min-height:0;aspect-ratio:auto;z-index:-2;border-radius:0}
+.hero.layout-image-led .hero-copy{max-width:680px;padding:0}.hero.layout-image-led h1{color:#fff;font-size:clamp(40px,7.4vw,104px);line-height:.96;letter-spacing:-.055em;overflow-wrap:anywhere}
+.hero.layout-image-led .body-copy,.hero.layout-image-led .eyebrow,.hero.layout-image-led .button-text{color:#fff}
+.hero.layout-image-led .actions{justify-content:flex-start;flex-wrap:wrap;margin-top:30px}.hero.layout-image-led .body-copy{max-width:45ch;font-size:clamp(14px,1.6vw,18px)}
+.document-site .hero.layout-compact{display:block;min-height:0;padding-block:clamp(32px,4vw,62px)}
+.document-site .hero.layout-compact.has-media{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,34%)}
+.hero.layout-compact h1{font-size:clamp(36px,5.7vw,74px);letter-spacing:-.045em;margin:12px 0;line-height:1.02}
+.hero.layout-compact .scene-photo{aspect-ratio:16/9;align-self:center}.hero.layout-compact .actions{margin-top:14px}
+@media(max-width:700px){.document-site .hero.layout-compact.has-media{grid-template-columns:1fr}.hero.layout-compact .scene-photo{max-height:180px}}
+@media(max-width:520px){.document-site .hero.layout-image-led.has-media{min-height:480px}.hero.layout-image-led::before{background:linear-gradient(0deg,#0d1019ed,#0d10193a)}}
+@media(max-width:700px){
+ .site-photo.mobile-focus-left{--mobile-position:left}.site-photo.mobile-focus-right{--mobile-position:right}
+ .site-photo.mobile-focus-top{--mobile-position:top}.site-photo.mobile-focus-bottom{--mobile-position:bottom}.site-photo.mobile-focus-center{--mobile-position:center}
+ .site-photo[class*="mobile-focus-"]{object-position:var(--mobile-position)}
+ .hero.layout-image-led .site-photo{object-position:var(--mobile-position,center)}
+}
+`;
+
 function documentScript(settings){
  const config=JSON.stringify(settings).replace(/</g,'\\u003c');
  return `(()=>{const settings=${config};const toggle=document.querySelector('.menu-toggle'),nav=document.querySelector('.nav');if(toggle&&nav){toggle.addEventListener('click',()=>{const open=nav.classList.toggle('open');toggle.setAttribute('aria-expanded',String(open))});nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{nav.classList.remove('open');toggle.setAttribute('aria-expanded','false')}));document.addEventListener('keydown',event=>{if(event.key==='Escape'){nav.classList.remove('open');toggle.setAttribute('aria-expanded','false')}})}if(settings.preview&&parent!==window)parent.postMessage({type:'biznova:page',projectId:settings.projectId,page:settings.page},'*');document.querySelectorAll('.contact-form').forEach((form,formIndex)=>{const status=form.querySelector('.form-status'),button=form.querySelector('button[type="submit"]'),label=button.innerHTML;let pending=null;const done=(ok,error)=>{clearTimeout(pending?.timer);pending=null;button.disabled=false;button.innerHTML=label;status.className='form-status '+(ok?'success':'error');status.textContent=ok?'Your message is saved. Thank you for reaching out.':(error||'We could not save your message. Please try again.');if(ok)form.reset()};window.addEventListener('message',event=>{if(!settings.preview||event.source!==parent||event.data?.type!=='biznova:lead-result'||!pending||event.data.requestId!==pending.id)return;done(!!event.data.ok,event.data.error)});form.addEventListener('submit',async event=>{event.preventDefault();if(!form.reportValidity()||pending)return;const values=Object.fromEntries(new FormData(form));button.disabled=true;button.textContent='Sending…';status.className='form-status';status.textContent='';if(settings.preview&&!settings.projectId){done(false,'Create a project before testing the contact form.');return}if(settings.preview&&parent!==window){const id=Date.now()+'-'+formIndex+'-'+Math.random().toString(36).slice(2);pending={id,timer:setTimeout(()=>done(false,'The preview did not respond. Please try again.'),12000)};parent.postMessage({type:'biznova:lead',projectId:settings.projectId,requestId:id,payload:values},'*');return}try{const endpoint=settings.preview?'/api/studio/projects/'+encodeURIComponent(settings.projectId)+'/leads':'/api/leads';const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const result=await response.json();done(response.ok,result.error)}catch{done(false)}})})})();`;
@@ -44,22 +72,33 @@ export function renderDocumentPage(spec,{page='/',preview=false,projectId='',esc
  const titleFor={hero:selected.title,features:toy?'Find your next building adventure.':'Thoughtful work. Clear possibilities.',content:'A little more context.',faq:'Good questions. Clear answers.',cta:'Let’s make the next step count.',contact:'Start a conversation.',pricing:'A direction that fits your needs.',gallery:'A closer look.',metrics:'The details that matter.'};
  const eyebrow=text=>text?`<div class="eyebrow">${e(text)}</div>`:'';
  const button=(section,defaultLabel=spec.ctaLabel)=>`<a class="button-primary" href="${e(href(section.buttonHref||defaultContact))}">${e(section.buttonLabel||defaultLabel||'Get in touch')}${arrow(16)}</a>`;
- const visual=(index=0)=>`<div class="scene">${toy&&toyArtwork?toyArtwork():sculpture(index)}</div>`;
- const sectionHead=section=>`<div class="section-header">${eyebrow(section.eyebrow||section.type)}<h2>${e(section.title||titleFor[section.type]||selected.title)}</h2></div>${section.body?`<p class="body-copy section-intro">${e(section.body)}</p>`:''}`;
+ const image=(media,eager=false)=>{
+  const asset=siteMediaPath(media.id);
+  const src=preview?`/api/studio/media${asset}`:asset;
+  return `<img class="site-photo focus-${e(media.focus||'center')}${media.mobileFocus?` mobile-focus-${e(media.mobileFocus)}`:''}" src="${e(src)}" alt="${e(media.alt)}" ${eager?'fetchpriority="high"':'loading="lazy"'} decoding="async">`;
+ };
+ const visual=(index=0,media,eager=false)=>media?`<div class="scene scene-photo">${image(media,eager)}</div>`:`<div class="scene">${toy&&toyArtwork?toyArtwork():sculpture(index)}</div>`;
+ const sectionHead=section=>`<div class="section-header">${eyebrow(section.eyebrow)}<h2>${e(section.title||titleFor[section.type]||selected.title)}</h2></div>${section.body?`<p class="body-copy section-intro">${e(section.body)}</p>`:''}`;
  const itemBody=item=>`<h3>${e(item.title)}</h3>${item.body?`<p>${e(item.body)}</p>`:''}${item.href?`<a class="item-link" href="${e(href(item.href))}">${e(item.label||'Explore')}${arrow(12)}</a>`:''}`;
  const renderSection=(section,index)=>{
-  const type=section.type,layout=section.layout||'grid',classes=`section section-${e(type)} layout-${e(layout)} wrap${type==='hero'?' hero':''}${type==='content'&&layout==='alternating'?' reverse':''}`;
+  const type=section.type,layout=section.layout||'grid',classes=`section section-${e(type)} layout-${e(layout)} wrap${section.media?' has-media':''}${type==='hero'?' hero':''}${type==='content'&&layout==='alternating'?' reverse':''}`;
   const attrs=`class="${classes}" id="${e(section.id)}" data-section-type="${e(type)}" data-layout="${e(layout)}"`;
-  if(type==='hero')return `<section ${attrs}><div class="hero-copy">${eyebrow(section.eyebrow||spec.tagline)}<h1>${e(section.title||spec.headline||selected.title)}</h1>${section.body||spec.description?`<p class="body-copy">${e(section.body||spec.description)}</p>`:''}<div class="actions">${button(section)}${spec.pages.length>1?`<a class="button-text" href="${e(pageHref(spec.pages.find(p=>p.id!==selected.id)?.slug||'/'))}">${e(spec.secondaryCta||'Explore more')}${arrow(12)}</a>`:''}</div></div>${visual(index)}</section>`;
-  if(type==='content')return `<section ${attrs}><div class="content-grid"><div class="content-copy">${eyebrow(section.eyebrow||'A closer look')}<h2>${e(section.title||titleFor.content)}</h2>${section.body?`<p class="body-copy">${e(section.body)}</p>`:''}${section.buttonLabel?`<div class="actions">${button(section)}</div>`:''}</div>${visual(index)}</div></section>`;
+  if(type==='catalog')return renderCatalog(section,{attrs,head:sectionHead(section),image,placeholder:toy?toyCollectionArt:undefined,escape:e});
+  if(type==='hero'){
+   const body=section.body?`<p class="body-copy">${e(section.body)}</p>`:'';
+   const action=section.buttonLabel?`<div class="actions">${button(section)}</div>`:'';
+   const art=layout==='compact'&&!section.media?'':visual(index,section.media,true);
+   return `<section ${attrs}><div class="hero-copy">${eyebrow(section.eyebrow)}<h1>${e(section.title||selected.title)}</h1>${body}${action}</div>${art}</section>`;
+  }
+  if(type==='content')return `<section ${attrs}><div class="content-grid"><div class="content-copy">${eyebrow(section.eyebrow||'A closer look')}<h2>${e(section.title||titleFor.content)}</h2>${section.body?`<p class="body-copy">${e(section.body)}</p>`:''}${section.buttonLabel?`<div class="actions">${button(section)}</div>`:''}</div>${visual(index,section.media)}</div></section>`;
   if(type==='cta')return `<section ${attrs}><div class="cta-panel"><div>${eyebrow(section.eyebrow)}<h2>${e(section.title||titleFor.cta)}</h2>${section.body?`<p>${e(section.body)}</p>`:''}</div>${button(section)}</div></section>`;
   if(type==='faq')return `<section ${attrs}><div class="faq-grid"><div>${eyebrow(section.eyebrow||'A few good questions')}<h2>${e(section.title||titleFor.faq)}</h2>${section.body?`<p class="body-copy section-intro">${e(section.body)}</p>`:''}</div><div class="faq-list">${(section.items||[]).map(item=>`<details><summary>${e(item.title)}</summary><p>${e(item.body||'Contact us to learn more.')}</p></details>`).join('')}</div></div></section>`;
   if(type==='contact')return `<section ${attrs}><div class="contact-panel"><div class="contact-copy">${eyebrow(section.eyebrow||'The next step')}<h2>${e(section.title||titleFor.contact)}</h2>${section.body?`<p class="body-copy">${e(section.body)}</p>`:''}<a href="mailto:${e(spec.email)}">${e(spec.email)}${arrow(14)}</a></div><form class="contact-form"><label>Your name<input name="name" autocomplete="name" required maxlength="100" placeholder="Alex Morgan"></label><label>Email address<input name="email" type="email" autocomplete="email" required maxlength="200" placeholder="you@example.com"></label><label class="field-full">${toy?'Occasion':'Company / brand'} (optional)<input name="company" maxlength="150" placeholder="${toy?'A gift, a new hobby, just because…':'Your team'}"></label><label class="field-full">${toy?'What would you like to build?':'What are you thinking about?'}<textarea name="message" rows="3" minlength="3" maxlength="5000" required placeholder="Tell us a little about what you have in mind…"></textarea></label><label class="honey" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label><button class="button-primary field-full" type="submit">${e(section.buttonLabel||'Send your message')}${arrow(16)}</button><p class="form-status" role="status" aria-live="polite">Messages are saved to this local project.</p></form></div></section>`;
   const items=(section.items||[]).map((item,i)=>{
-   const image=toy&&toyCollectionArt?toyCollectionArt(i):type==='gallery'?`<div class="gallery-art">${sculpture(i)}</div>`:`<div class="item-icon" aria-hidden="true">${['✳','◈','◎','↗','◇','✦'][i%6]}</div>`;
+   const artwork=item.media?image(item.media):toy&&toyCollectionArt?toyCollectionArt(i):type==='gallery'?`<div class="gallery-art">${sculpture(i)}</div>`:`<div class="item-icon" aria-hidden="true">${['✳','◈','◎','↗','◇','✦'][i%6]}</div>`;
    if(type==='metrics')return `<article class="item metric-item">${item.label?`<strong class="item-label">${e(item.label)}</strong>`:''}${itemBody({...item,href:undefined})}</article>`;
    const content=`${type==='pricing'?`<strong class="item-label">${e(item.label||'Ask for details')}</strong>`:''}${itemBody(item)}`;
-   return `<article class="item">${layout==='alternating'?`<div class="item-visual">${image}</div><div class="item-copy"><span class="item-index">${String(i+1).padStart(2,'0')}</span>${content}</div>`:`<span class="item-index">${String(i+1).padStart(2,'0')}</span>${type==='pricing'?'':image}<div class="item-copy">${content}</div>`}</article>`;
+   return `<article class="item">${layout==='alternating'?`<div class="item-visual">${artwork}</div><div class="item-copy"><span class="item-index">${String(i+1).padStart(2,'0')}</span>${content}</div>`:`<span class="item-index">${String(i+1).padStart(2,'0')}</span>${type==='pricing'?'':artwork}<div class="item-copy">${content}</div>`}</article>`;
   }).join('');
   return `<section ${attrs}>${sectionHead(section)}<div class="item-grid">${items}</div>${section.buttonLabel?`<div class="actions">${button(section)}</div>`:''}</section>`;
  };
@@ -69,7 +108,7 @@ export function renderDocumentPage(spec,{page='/',preview=false,projectId='',esc
  const header=`<header class="site-header wrap">${brand()}<button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="main-nav"><span></span><span></span></button><nav class="nav" id="main-nav" aria-label="Main navigation">${navigation}</nav></header>`;
  const footer=`<footer class="site-footer wrap"><div class="footer-top"><div>${brand()}<p>${e(spec.footer)}</p></div><div class="footer-links">${pageLinks}</div></div><div class="footer-wordmark" aria-hidden="true">${e(spec.brand)}</div><div class="footer-bottom"><span>© ${new Date().getUTCFullYear()} ${e(spec.brand)}. All rights reserved.</span><a href="#top">Back to top ↑</a></div></footer>`;
  const sections=selected.sections||[];
- return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${e(sections.find(s=>s.type==='hero')?.body||spec.description)}"><meta name="theme-color" content="${['glass','aurora','studio'].includes(style)?'#10111c':'#f7f7f2'}"><title>${e(selected.title)} — ${e(spec.brand)}</title><style>:root{--accent:${accent};--accent-ink:${accentInk(accent)}}${css}</style></head><body class="theme-${style} document-site${toy?' page-toy-store':''}" id="top">${header}<div class="page-shell"><div class="page-index wrap"><span>${e(spec.brand)}</span><span>${e(selected.title)} / ${String(spec.pages.indexOf(selected)+1).padStart(2,'0')}</span></div><main>${sections.length?sections.map(renderSection).join(''):`<section class="empty-page wrap"><h1>${e(selected.title)}</h1><p>This page is ready for its first section.</p></section>`}</main>${footer}</div><script>${documentScript({preview,projectId,page:selected.slug})}</script></body></html>`;
+ return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="${e(sections.find(s=>s.type==='hero')?.body||spec.description)}"><meta name="theme-color" content="${['glass','aurora','studio'].includes(style)?'#10111c':'#f7f7f2'}"><title>${e(selected.title)} — ${e(spec.brand)}</title><style>:root{--accent:${accent};--accent-ink:${accentInk(accent)}}${css}${sections.some(section=>section.type==='catalog')?catalogCss:''}${photoCss}</style></head><body class="theme-${style} document-site${toy?' page-toy-store':''}" id="top">${header}<div class="page-shell"><main>${sections.length?sections.map(renderSection).join(''):`<section class="empty-page wrap"><h1>${e(selected.title)}</h1><p>This page is ready for its first section.</p></section>`}</main>${footer}</div><script>${sections.some(section=>section.type==='catalog')?`(${initCatalogs.toString()})(${JSON.stringify({preview,projectId,page:selected.slug}).replace(/</g,"\\u003c")});`:''}${documentScript({preview,projectId,page:selected.slug})}</script></body></html>`;
 }
 
 export function documentPageFiles(spec,context={}){

@@ -1,4 +1,5 @@
 import {isDeepStrictEqual} from 'node:util';
+import {isSiteMedia} from './site-media.mjs';
 
 export class SiteDocumentError extends Error {
   constructor(message){super(message);this.name='SiteDocumentError';}
@@ -10,9 +11,11 @@ const LINK=/^(?:#[a-z][a-z0-9-]{0,47}|\/(?:[a-z][a-z0-9-]{0,39})?(?:#[a-z][a-z0-
 const SECRET=/\bsk-[a-zA-Z0-9_-]{16,}|\bAKIA[A-Z0-9]{16}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[a-zA-Z0-9_.~-]{16,}/i;
 const RESERVED=new Set(['/api','/data','/public','/assets']);
 const SECTION_LIMITS={eyebrow:140,title:220,body:2000,buttonLabel:70,buttonHref:100};
-const ITEM_LIMITS={title:140,body:1000,label:80,href:100};
+const ITEM_LIMITS={title:140,body:1000,label:80,href:100,sku:48,category:80};
+const CURRENCIES=['USD','HKD','EUR','GBP'];
+const FOCUSES=['center','left','right','top','bottom'];
 export const SECTION_CATALOG=Object.freeze([
-  {type:'hero',layouts:['split','centered','banner'],description:'One main heading with a focused introduction and optional call to action.'},
+  {type:'hero',layouts:['split','centered','banner','image-led','compact'],description:'One focused heading and call to action. Use image-led with a relevant hero photograph for an editorial opening, and compact for secondary pages where users should reach the catalog quickly.'},
   {type:'features',layouts:['grid','list','alternating'],description:'Services, benefits or collections. Vary card and row layouts to create rhythm.'},
   {type:'content',layouts:['split','centered','alternating'],description:'Editorial narrative, story or explanation with original local artwork.'},
   {type:'faq',layouts:['list','grid'],description:'Questions and answers using native expandable details.'},
@@ -20,24 +23,28 @@ export const SECTION_CATALOG=Object.freeze([
   {type:'contact',layouts:['split','centered'],description:'An inquiry form backed by the existing local SQLite service.'},
   {type:'pricing',layouts:['grid','list'],description:'Offer comparison. Only use user-supplied pricing; otherwise describe plans without fabricated prices.'},
   {type:'gallery',layouts:['grid','alternating'],description:'Collections or projects illustrated with original local CSS/SVG artwork.'},
+  {type:'catalog',layouts:['grid','list'],description:'Searchable, filterable products with detail dialogs. Add SKU, category and relevant media to each item. Supply currency and every priceCents only when the brief supplies prices and requests a shopping bag. detailLayout controls the detail dialog.'},
   {type:'metrics',layouts:['grid','list','banner'],description:'User-supplied facts or process milestones. Never invent performance figures.'},
 ]);
 const TYPES=SECTION_CATALOG.map(s=>s.type);
-const LAYOUTS=['split','centered','grid','list','alternating','banner'];
+const LAYOUTS=['split','centered','grid','list','alternating','banner','image-led','compact'];
 const object=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const string=maxLength=>({type:'string',minLength:1,maxLength});
 const linkSchema={type:'string',maxLength:100,pattern:LINK.source};
-const itemSchema=object({title:string(140),body:string(1000),label:string(80),href:linkSchema},['title']);
-const sectionProperties={id:{type:'string',pattern:ID.source},type:{type:'string',enum:TYPES},layout:{type:'string',enum:LAYOUTS},eyebrow:string(140),title:string(220),body:string(2000),buttonLabel:string(70),buttonHref:linkSchema,items:{type:'array',maxItems:12,items:itemSchema}};
+const focusSchema={type:'string',enum:FOCUSES};
+const mediaSchema=object({id:string(64),alt:string(180),focus:focusSchema,mobileFocus:focusSchema},['id','alt']);
+const itemSchema=object({title:string(140),body:string(1000),label:string(80),href:linkSchema,media:mediaSchema,sku:{type:'string',pattern:ID.source},category:string(80),priceCents:{type:'integer',minimum:0,maximum:100000000}},['title']);
+const sectionProperties={id:{type:'string',pattern:ID.source},type:{type:'string',enum:TYPES},layout:{type:'string',enum:LAYOUTS},eyebrow:string(140),title:string(220),body:string(2000),buttonLabel:string(70),buttonHref:linkSchema,media:mediaSchema,currency:{type:'string',enum:CURRENCIES},detailLayout:{type:'string',enum:['split','stacked']},items:{type:'array',maxItems:12,items:itemSchema}};
 const sectionSchema=object(sectionProperties,['id','type','layout']);
-const changesSchema=object(Object.fromEntries(Object.entries(sectionProperties).filter(([key])=>key!=='id')));
+const changesSchema=object(Object.fromEntries(Object.entries(sectionProperties).filter(([key])=>key!=='id').map(([key,schema])=>[key,['type','layout'].includes(key)?schema:{anyOf:[schema,{type:'null'}]}])));
 const tool=(name,description,parameters)=>({type:'function',function:{name,description,parameters}});
 export const DOCUMENT_TOOLS=Object.freeze([
   tool('add_page','Add an empty page. The first document edit migrates the legacy home page without rewriting its copy. Add sections before finishing.',object({id:{type:'string',pattern:ID.source},slug:{type:'string',pattern:SLUG.source},title:string(140)},['id','slug','title'])),
   tool('update_page','Change a page title or slug. Home keeps slug /. Repair navigation if a slug changes.',object({pageId:string(48),title:string(140),slug:string(41)},['pageId'])),
   tool('remove_page','Remove a non-home page. Repair any links that pointed to it.',object({pageId:string(48)},['pageId'])),
   tool('add_section','Insert a typed component into a page at an optional zero-based position. Read the component catalog and existing page first.',object({pageId:string(48),section:sectionSchema,index:{type:'integer',minimum:0,maximum:12}},['pageId','section'])),
-  tool('update_page_section','Patch a component by page and section ID, including its content, type or layout. IDs stay stable.',object({pageId:string(48),sectionId:string(48),changes:changesSchema},['pageId','sectionId','changes'])),
+  tool('update_page_section','Patch a component by page and section ID, including its content, type or layout. IDs stay stable. Use null to remove optional fields. To remove a CTA, set both buttonLabel and buttonHref to null.',object({pageId:string(48),sectionId:string(48),changes:changesSchema},['pageId','sectionId','changes'])),
+  tool('update_product','Edit one catalog product by SKU. Preserve its SKU and every other product. Change price only when the brief provides a new price.',object({pageId:string(48),sectionId:string(48),sku:string(48),changes:object(Object.fromEntries(Object.entries(itemSchema.properties).filter(([key])=>key!=='sku')))},['pageId','sectionId','sku','changes'])),
   tool('move_section','Move a component within its page to a zero-based index. Other component content stays unchanged.',object({pageId:string(48),sectionId:string(48),index:{type:'integer',minimum:0,maximum:11}},['pageId','sectionId','index'])),
   tool('remove_section','Remove a component by page and section ID. Inspect and repair any orphan links before finishing.',object({pageId:string(48),sectionId:string(48)},['pageId','sectionId'])),
 ]);
@@ -63,6 +70,13 @@ function text(value,max,name){
 const identifier=(value,name)=>{if(typeof value!=='string'||!ID.test(value))fail(`${name} must be a lowercase identifier with letters, digits or hyphens.`);};
 const slug=value=>{if(typeof value!=='string'||(value!=='/'&&!SLUG.test(value))||RESERVED.has(value))fail('Use / for home or a safe one-level path such as /about; system paths are reserved.');};
 export function isDocumentHref(value){return typeof value==='string'&&value.length<=100&&LINK.test(value)&&!RESERVED.has(value.split('#')[0]);}
+function assertMedia(media){
+  keys(media,['id','alt','focus','mobileFocus'],['id','alt']);
+  if(!isSiteMedia(media.id))fail('Select an image ID returned by list_media.');
+  text(media.alt,180,'Image alt text');
+  if(media.focus!==undefined&&!FOCUSES.includes(media.focus))fail('Select a supported image focus.');
+  if(media.mobileFocus!==undefined&&!FOCUSES.includes(media.mobileFocus))fail('Select a supported mobile image focus.');
+}
 function assertSection(section){
   keys(section,Object.keys(sectionProperties),['id','type','layout']);identifier(section.id,'Section ID');
   if(['top','main-nav'].includes(section.id))fail('This section ID is reserved for the page or navigation.');
@@ -70,9 +84,25 @@ function assertSection(section){
   if(!catalog.layouts.includes(section.layout))fail(`The ${section.type} section supports ${catalog.layouts.join(', ')} layouts.`);
   for(const [key,max]of Object.entries(SECTION_LIMITS))if(Object.hasOwn(section,key))text(section[key],max,key);
   if(section.buttonHref!==undefined&&!isDocumentHref(section.buttonHref))fail('Buttons must use safe internal page or section links.');
+  if(section.media!==undefined)assertMedia(section.media);
+  if(section.currency!==undefined&&(section.type!=='catalog'||!CURRENCIES.includes(section.currency)))fail('Use a supported currency on a product catalog.');
+  if(section.detailLayout!==undefined&&(section.type!=='catalog'||!['split','stacked'].includes(section.detailLayout)))fail('Choose split or stacked product detail layout.');
   if(section.items!==undefined){
     if(!Array.isArray(section.items)||section.items.length>12)fail('A section supports at most 12 items.');
-    for(const item of section.items){keys(item,Object.keys(ITEM_LIMITS),['title']);for(const[key,max]of Object.entries(ITEM_LIMITS))if(Object.hasOwn(item,key))text(item[key],max,key);if(item.href!==undefined&&!isDocumentHref(item.href))fail('Item links must use safe internal page or section links.');}
+    const skus=new Set();
+    for(const item of section.items){
+      keys(item,[...Object.keys(ITEM_LIMITS),'media','priceCents'],['title']);
+      for(const[key,max]of Object.entries(ITEM_LIMITS))if(Object.hasOwn(item,key))text(item[key],max,key);
+      if(item.href!==undefined&&!isDocumentHref(item.href))fail('Item links must use safe internal page or section links.');
+      if(item.media!==undefined)assertMedia(item.media);
+      if(section.type==='catalog'){
+        identifier(item.sku,'Product SKU');
+        if(skus.has(item.sku)||!item.category)fail('Use unique product SKUs and add a category to every product.');
+        skus.add(item.sku);
+      }else if(item.sku!==undefined||item.category!==undefined||item.priceCents!==undefined)fail('Product fields belong in a catalog.');
+      if(item.priceCents!==undefined&&(!section.currency||!Number.isInteger(item.priceCents)||item.priceCents<0||item.priceCents>100000000))fail('Provide supported currency and integer price amounts in cents.');
+      if(section.currency&&item.priceCents===undefined)fail('A shopping bag requires a supplied price for every product. Omit currency and prices for a browse-only catalog.');
+    }
   }
 }
 export function assertPages(pages){
@@ -109,7 +139,29 @@ export function executeDocumentTool(name,args,spec){
     case'update_page':{keys(args,['pageId','title','slug'],['pageId']);if(args.title===undefined&&args.slug===undefined)fail('Provide a page title or slug to update.');const page=findPage(pages,args.pageId);if(args.title!==undefined)page.title=args.title;if(args.slug!==undefined)page.slug=args.slug;summary=`Updated page ${args.pageId}.`;break;}
     case'remove_page':{keys(args,['pageId'],['pageId']);findPage(pages,args.pageId);if(args.pageId==='home')fail('The home page cannot be removed.');pages.splice(pages.findIndex(p=>p.id===args.pageId),1);summary=`Removed page ${args.pageId}.`;break;}
     case'add_section':{keys(args,['pageId','section','index'],['pageId','section']);const page=findPage(pages,args.pageId),index=args.index??page.sections.length;if(!Number.isInteger(index)||index<0||index>page.sections.length)fail('Use an insertion index between zero and the current section count.');page.sections.splice(index,0,structuredClone(args.section));summary=`Added section ${args.section?.id||''} to ${args.pageId}.`;break;}
-    case'update_page_section':{keys(args,['pageId','sectionId','changes'],['pageId','sectionId','changes']);keys(args.changes,Object.keys(sectionProperties).filter(k=>k!=='id'));if(!Object.keys(args.changes).length)fail('Provide at least one component field to update.');const page=findPage(pages,args.pageId),index=findSection(page,args.sectionId);page.sections[index]={...page.sections[index],...structuredClone(args.changes)};summary=`Updated section ${args.sectionId} on ${args.pageId}.`;break;}
+    case'update_page_section':{
+      keys(args,['pageId','sectionId','changes'],['pageId','sectionId','changes']);
+      keys(args.changes,Object.keys(sectionProperties).filter(k=>k!=='id'));
+      if(!Object.keys(args.changes).length)fail('Provide at least one component field to update.');
+      const page=findPage(pages,args.pageId),index=findSection(page,args.sectionId);
+      const section={...page.sections[index],...structuredClone(args.changes)};
+      for(const [field,value] of Object.entries(section))if(value===null)delete section[field];
+      page.sections[index]=section;
+      summary=`Updated section ${args.sectionId} on ${args.pageId}.`;
+      break;
+    }
+    case'update_product':{
+      keys(args,['pageId','sectionId','sku','changes'],['pageId','sectionId','sku','changes']);
+      keys(args.changes,Object.keys(itemSchema.properties).filter(key=>key!=='sku'));
+      if(!Object.keys(args.changes).length)fail('Provide at least one product field to update.');
+      const page=findPage(pages,args.pageId);
+      const catalog=page.sections[findSection(page,args.sectionId)];
+      const index=catalog.type==='catalog'?catalog.items?.findIndex(item=>item.sku===args.sku):-1;
+      if(index===undefined||index<0)fail('Read the catalog section to find an existing product SKU.');
+      catalog.items[index]={...catalog.items[index],...structuredClone(args.changes)};
+      summary=`Updated product ${args.sku} on ${args.pageId}.`;
+      break;
+    }
     case'move_section':{keys(args,['pageId','sectionId','index'],['pageId','sectionId','index']);const page=findPage(pages,args.pageId),index=findSection(page,args.sectionId);if(!Number.isInteger(args.index)||args.index<0||args.index>=page.sections.length)fail('Use a destination index within the current page.');const[section]=page.sections.splice(index,1);page.sections.splice(args.index,0,section);summary=`Moved section ${args.sectionId} to position ${args.index} on ${args.pageId}.`;break;}
     case'remove_section':{keys(args,['pageId','sectionId'],['pageId','sectionId']);const page=findPage(pages,args.pageId);page.sections.splice(findSection(page,args.sectionId),1);summary=`Removed section ${args.sectionId} from ${args.pageId}.`;break;}
     default:fail('Unknown document tool.');
@@ -139,7 +191,8 @@ export function inspectDocument(spec){
       if(section.buttonHref&&!section.buttonLabel)add('warning','missing-button-label','Give the call to action a clear text label.',page.id,section.id);
       if(section.buttonHref)checkLink(section.buttonHref,page,section.id);
       for(const item of section.items||[])if(item.href)checkLink(item.href,page,section.id);
-      if(['features','faq','pricing','gallery','metrics'].includes(section.type)&&!section.items?.length)add('error','empty-items',`Add items to the ${section.type} component.`,page.id,section.id);
+      if(['features','faq','pricing','gallery','metrics','catalog'].includes(section.type)&&!section.items?.length)add('error','empty-items',`Add items to the ${section.type} component.`,page.id,section.id);
+      if(section.layout==='image-led'&&!section.media)add('error','hero-image','Choose a relevant image or switch to another hero layout.',page.id,section.id);
       if(section.type==='faq'&&section.items?.some(item=>!item.body))add('error','missing-answer','Every FAQ question needs an answer.',page.id,section.id);
       if(section.type==='hero'&&!section.body)add('warning','thin-introduction','Add a short explanation of the offer and audience.',page.id,section.id);
       if(section.type==='pricing')for(const item of section.items||[])if(!item.label)add('warning','unpriced-offer','Use only supplied prices, or explicitly label this offer as an inquiry.',page.id,section.id);

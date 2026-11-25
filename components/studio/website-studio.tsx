@@ -28,6 +28,27 @@ async function api<T>(path:string,body?:unknown):Promise<T>{
  const response=await fetch(`/api/studio${path}`,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
  const result=await response.json() as T&{error?:string};if(!response.ok)throw new Error(result.error||'Request failed. Please try again.');return result;
 }
+
+async function uploadPhoto(file:File){
+ if(file.size>20*1024*1024)throw new Error('Choose a photo smaller than 20 MB.');
+ const bitmap=await createImageBitmap(file);
+ const scale=Math.min(1,1800/Math.max(bitmap.width,bitmap.height));
+ const canvas=document.createElement('canvas');
+ canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+ canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+ const painter=canvas.getContext('2d');
+ try{
+  if(!painter)throw new Error('This browser could not prepare the photo.');
+  painter.drawImage(bitmap,0,0,canvas.width,canvas.height);
+ }finally{bitmap.close();}
+ const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/webp',0.82));
+ if(!blob||blob.type!=='image/webp')throw new Error('This browser could not convert the photo.');
+ const response=await fetch('/api/studio/media',{method:'POST',headers:{'Content-Type':'image/webp','X-Image-Name':encodeURIComponent(file.name.slice(0,100))},body:blob});
+ const result=await response.json() as {id:string;error?:string};
+ if(!response.ok)throw new Error(result.error||'Image upload failed.');
+ return result.id;
+}
+
 export default function WebsiteStudio(){
  const [projects,setProjects]=useState<ProjectSummary[]>([]),[project,setProject]=useState<Project|null>(null),[config,setConfig]=useState<Config>({});
  const [prompt,setPrompt]=useState(''),[style,setStyle]=useState<Style>('glass'),[tab,setTab]=useState<'preview'|'structure'|'files'|'backend'|'tools'|'history'>('preview'),[device,setDevice]=useState<'desktop'|'mobile'>('desktop');
@@ -35,6 +56,7 @@ export default function WebsiteStudio(){
  const [scope,setScope]=useState<EditScope>('auto');
  const toolCalling=config.mode==='deepseek'&&config.configured!==false;
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true),[showBrief,setShowBrief]=useState(false),[showReferences,setShowReferences]=useState(false),[showLibrary,setShowLibrary]=useState(false),[chatHidden,setChatHidden]=useState(false);
+ const [uploadingPhoto,setUploadingPhoto]=useState(false);
  const [files,setFiles]=useState<SourceFile[]>([]),[filePath,setFilePath]=useState(''),[leads,setLeads]=useState<Lead[]>([]),[sideLoading,setSideLoading]=useState(false),[toast,setToast]=useState('');
  const previewFrame=useRef<HTMLDivElement>(null);
  const chatEnd=useRef<HTMLDivElement>(null),iframe=useRef<HTMLIFrameElement>(null),textarea=useRef<HTMLTextAreaElement>(null),activeId=useRef<string|null>(null);
@@ -56,6 +78,20 @@ export default function WebsiteStudio(){
  useEffect(()=>{
   const receive=async(event:MessageEvent)=>{if(event.source!==iframe.current?.contentWindow||!projectId||event.data?.projectId!==projectId)return;
    if(event.data.type==='biznova:page'&&typeof event.data.page==='string'){setSelectedPage(event.data.page);return;}
+   if(event.data.type==='biznova:bag-load'||event.data.type==='biznova:bag-save'){
+    const {storageKey,quantities}=event.data;
+    if(typeof storageKey!=='string'||!/^biznova-bag:\/[a-z0-9-]{0,39}:[a-z][a-z0-9-]{0,47}$/.test(storageKey))return;
+    const key=`${storageKey}:${projectId}`;
+    try{
+     if(event.data.type==='biznova:bag-load'){
+      iframe.current?.contentWindow?.postMessage({type:'biznova:bag-state',storageKey,quantities:JSON.parse(localStorage.getItem(key)||'{}')},'*');
+     }else if(quantities&&typeof quantities==='object'&&!Array.isArray(quantities)){
+      const entries=Object.entries(quantities);
+      if(entries.length<=12&&entries.every(([sku,qty])=>/^[a-z][a-z0-9-]{0,47}$/.test(sku)&&typeof qty==='number'&&Number.isInteger(qty)&&qty>0&&qty<=99))localStorage.setItem(key,JSON.stringify(quantities));
+     }
+    }catch{ /* The preview can still use its in-memory bag. */ }
+    return;
+   }
    if(event.data.type!=='biznova:lead')return;
    try{await api(`/projects/${projectId}/leads`,event.data.payload);iframe.current?.contentWindow?.postMessage({type:'biznova:lead-result',requestId:event.data.requestId,ok:true},'*');setToast('Your message was saved to the local database.');}
    catch(e){iframe.current?.contentWindow?.postMessage({type:'biznova:lead-result',requestId:event.data.requestId,ok:false,error:(e as Error).message},'*');}
@@ -71,6 +107,15 @@ export default function WebsiteStudio(){
  const chooseStyle=async(nextStyle:Style)=>{if(busy)return false;if(!project){setStyle(nextStyle);return true;}if(nextStyle===project.spec.style)return true;const result=await send(`Switch only the visual style to ${nextStyle} (${directions.find(d=>d.id===nextStyle)!.name} / ${directions.find(d=>d.id===nextStyle)!.label}). Keep the accent color, page type, brand, all copy, navigation, services and contact information exactly unchanged.`,nextStyle,toolCalling?'theme':'auto',true);if(result&&result.spec.style!==nextStyle){setError('The agent kept the current style. Review the tool history or try applying this direction again.');return false;}return !!result;};
  const openStyleLibrary=()=>{setShowBrief(false);setShowReferences(false);setError('');setShowLibrary(true);};
  const requestStructureEdit=(message:string)=>{setScope('auto');setPrompt(message);textarea.current?.focus();};
+ const attachPhoto=async(file:File)=>{
+  setUploadingPhoto(true);setError('');
+  try{
+   const id=await uploadPhoto(file);
+   setPrompt(brief=>`${brief.trim()}\nUse attached photo ${id} for [describe its placement].`.trim());
+   setScope('auto');textarea.current?.focus();
+  }catch(error){setError((error as Error).message);}
+  finally{setUploadingPhoto(false);}
+ };
  const previewPage=(slug:string)=>{setSelectedPage(slug);setTab('preview');};
  const submit=(e:FormEvent)=>{e.preventDefault();void send();};
  const selectedFile=files.find(f=>f.path===filePath);
@@ -89,7 +134,8 @@ export default function WebsiteStudio(){
     <div className="ws-composer-area">{error&&<div className="ws-error" role="alert"><AlertCircle size={15}/><span>{error}</span><button aria-label="Dismiss error" onClick={()=>setError('')}><X size={13}/></button></div>}
      {project&&<div className="ws-quick-edits"><button disabled={busy} onClick={()=>{setScope('hero');setPrompt('Change the headline to "Make good business happen."');}}>Edit copy</button><button disabled={busy} onClick={()=>{setScope('theme');setPrompt('Change the accent color to #f97316');}}>Change colors</button><button disabled={busy} onClick={()=>setTab('structure')}>Pages & structure</button><button disabled={busy} onClick={()=>setShowBrief(true)}>View brief</button></div>}
      {project&&toolCalling&&<div className="ws-edit-scope"><label htmlFor="ws-edit-scope">Edit scope</label><select id="ws-edit-scope" disabled={busy} value={scope} onChange={e=>setScope(e.target.value as EditScope)}>{editScopes.map(s=><option value={s.id} key={s.id}>{s.label}</option>)}</select><small>{scope==='auto'?'Tools follow your request.':'Only this section can change.'}</small></div>}
-     <form className="ws-composer" onSubmit={submit}><textarea ref={textarea} aria-label="Website brief or revision instructions" placeholder={project?'Add a page, reshape a section, or refine the content and style…':'Describe your business, audience, pages and goals…'} value={prompt} maxLength={6000} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();void send();}}}/><div className="ws-composer-bottom"><span><Command size={11}/> Enter to build</span><button type="submit" aria-label={project?'Send revision':'Build website'} disabled={busy||!prompt.trim()}>{busy?<LoaderCircle size={17}/>:<ArrowUp size={18}/>}</button></div></form><p className="ws-engine-note">{config.configured===false?(config.note||'Model configuration required.'):config.mode==='deepseek'?`DeepSeek · ${config.model||'deepseek-flash'} · Server-side API`:config.mode==='ollama'?`Local model · ${config.model||'Ollama'}`:'Rule-based builder. Model API integration is pending.'}</p></div>
+     {toolCalling&&<label className="ws-photo-upload"><input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy||uploadingPhoto} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void attachPhoto(file);}}/><span>{uploadingPhoto?'Preparing image…':'Attach photo'}</span></label>}
+     <form className="ws-composer" onSubmit={submit}><textarea ref={textarea} aria-label="Website brief or revision instructions" placeholder={project?'Add a page, reshape a section, or refine the content and style…':'Describe your business, audience, pages and goals…'} value={prompt} maxLength={6000} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();void send();}}}/><div className="ws-composer-bottom"><span><Command size={11}/> Enter to build</span><button type="submit" aria-label={project?'Send revision':'Build website'} disabled={busy||uploadingPhoto||!prompt.trim()}>{busy?<LoaderCircle size={17}/>:<ArrowUp size={18}/>}</button></div></form><p className="ws-engine-note">{config.configured===false?(config.note||'Model configuration required.'):config.mode==='deepseek'?`DeepSeek · ${config.model||'deepseek-flash'} · Server-side API`:config.mode==='ollama'?`Local model · ${config.model||'Ollama'}`:'Rule-based builder. Model API integration is pending.'}</p></div>
    </aside>}
    <section className="ws-canvas-panel" aria-label="Website project"><div className="ws-canvas-toolbar"><div className="ws-canvas-title">{chatHidden&&<button className="ws-icon" aria-label="Show conversation" onClick={()=>setChatHidden(false)}><PanelLeftOpen size={17}/></button>}<div><strong>{project?.name||'Your next big idea'}</strong><span>{project?<><i/>{busy?'Building…':'Saved locally'}</>:'A little direction. A whole new website.'}</span></div></div><div className="ws-canvas-tools"><button className="ws-icon" title="Browse style library" aria-label="Browse style library" disabled={busy} onClick={openStyleLibrary}><Palette size={16}/></button>{project&&<button className="ws-icon" title="View project brief" aria-label="View project brief" onClick={()=>setShowBrief(true)}><Layers size={16}/></button>}<button className="ws-export" disabled={!project||busy} onClick={()=>{if(project){const link=document.createElement('a');link.href=`/api/studio/projects/${project.id}/export`;link.download='';link.click();}}}><Download size={14}/><span>Export project</span></button></div></div>
     <div className="ws-tabbar"><div className="ws-tabs">{[{id:'preview',label:'Preview',icon:Monitor},{id:'structure',label:'Pages',icon:Layers},{id:'files',label:'Project files',icon:Code2},{id:'backend',label:'Backend & Data',icon:Database},{id:'tools',label:'Tools',icon:Wrench},{id:'history',label:'Versions',icon:History}].map(t=><button key={t.id} disabled={!project&&t.id!=='preview'} className={tab===t.id?'active':''} onClick={()=>setTab(t.id as typeof tab)}><t.icon size={13}/>{t.label}{t.id==='history'&&project&&<span>{project.versions.length}</span>}</button>)}</div><div className="ws-device-switch"><button aria-label="Desktop preview" aria-pressed={device==='desktop'} onClick={()=>{setDevice('desktop');setTab('preview');}}><Monitor size={14}/></button><button aria-label="Mobile preview" aria-pressed={device==='mobile'} onClick={()=>{setDevice('mobile');setTab('preview');}}><Smartphone size={14}/></button></div></div>

@@ -4,6 +4,7 @@ import { STYLE_IDS, STYLE_CATALOG } from '../lib/studio-styles.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { normalizeSpec, renderSite } from './site-generator.mjs';
+import { listSiteMedia } from './site-media.mjs';
 
 export const AUTONOMOUS_LIMITS=Object.freeze({turns:48,calls:128,timeout:600000});
 const MAX_MODEL_TURNS = 6;
@@ -41,6 +42,7 @@ const navigationItem = objectSchema({ label: textSchema(50), href: { type: 'stri
 // checks section-dependent keys and the actual current service index bounds.
 export const WEBSITE_AGENT_TOOLS = Object.freeze([
   ...PLANNING_TOOLS, ...DOCUMENT_TOOLS,
+  tool('list_media', 'List available local photos and their subjects. Use a relevant image ID in section or item media with appropriate alt text. Only choose images that fit the brief.', objectSchema({})),
   tool('list_styles', 'List the available original design directions and their layout differences. Use this to select a style that fits the request. This tool does not change content.', objectSchema({})),
   tool('read_site', 'Read the website with {} (do not use section all). section pages returns a lightweight outline; pageId and sectionId read exact content. Read the relevant content before changing it.', objectSchema({ section: { type: 'string', enum: [...Object.keys(SECTIONS), 'pages'] }, pageId:textSchema(48), sectionId:textSchema(48) })),
   tool('update_section', 'Update only the supplied fields in one section. Hero: tagline, headline, description, ctaLabel, secondaryCta. About: aboutTitle, aboutText. Footer: footer. Contact: email. Brand: brand. All other fields stay unchanged.', objectSchema({
@@ -196,6 +198,7 @@ function executeTool(name, args, staged, scope, context) {
       summary='Recorded the website goal, design direction and acceptance requirements.';data={plan:context.plan};break;
     }
     case 'list_sections': {assertKeys(args,[]);summary='Listed composable sections and layouts.';data={sections:SECTION_CATALOG};break;}
+    case 'list_media': {assertKeys(args,[]);summary='Listed available local images.';data={images:listSiteMedia(staged,context.request),illustrationOptions:['For building bricks, update_theme pageType toy-store selects the original brick illustrations. Leave media unset to use them; the renderer supplies the illustrations.']};break;}
     case 'inspect_site': {assertKeys(args,[]);data=inspectAcceptance(staged,context.plan,{initial:context.initial});summary=data.valid?'All structural and plan checks passed.':'Found website checks that need repair.';break;}
     case 'finish_site': {
       assertKeys(args,['status','summary','remaining'],['status','summary','remaining']);
@@ -322,7 +325,7 @@ function changeSummary(fields) {
   return `Updated ${labels.join(', ')}. Validated the website content and prepared the local preview.`;
 }
 
-export async function runWebsiteAgent({ current, request, style, scope = 'auto', complete, autonomous=false, initial=false, history=[] }) {
+export async function runWebsiteAgent({ current, request, style, scope = 'auto', complete, review, autonomous=false, initial=false, history=[] }) {
   let staged;
   try {
     assertSpec(current);
@@ -333,12 +336,15 @@ export async function runWebsiteAgent({ current, request, style, scope = 'auto',
     staged = structuredClone(current);
   } catch { throw agentError(failedMessage); }
   const limits=autonomous?AUTONOMOUS_LIMITS:{turns:MAX_MODEL_TURNS,calls:MAX_TOOL_CALLS,timeout:RUN_TIMEOUT_MS};
-  const context={autonomous,initial,plan:null,outcome:null};let repairPrompted=false;
+  const context={autonomous,initial,request,plan:null,outcome:null};let repairPrompted=false;
   const original = structuredClone(staged), startedAt = new Date().toISOString();
   const run = { id: randomUUID(), status: 'completed', scope, startedAt, completedAt: null, steps: [], changedFields: [], modelTurns: 0 };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), limits.timeout);
   const touched = new Set();
+  let reviewResult;
+  let reviewedSpec;
+  let reviewCount = 0;
   const deliver=(content)=>{
         assertSpec(staged);
         const fields = changedPaths(original, staged);
@@ -346,11 +352,18 @@ export async function runWebsiteAgent({ current, request, style, scope = 'auto',
         if (scope !== 'auto' && fields.some(path => !(path==='pages'&&context.scopedPageEdit)&&!SECTIONS[scope].includes(path.split('.')[0]))) throw agentError(failedMessage);
         const checks=autonomous?inspectAcceptance(staged,context.plan,{initial}):null;
         if(autonomous&&initial&&!context.outcome)checks.issues.push({severity:'error',code:'outcome_required',message:'Call finish_site after checking the completed work.'});
+        if(checks && reviewResult && isDeepStrictEqual(staged,reviewedSpec)){
+          checks.browser=reviewResult.browser;
+          checks.browserInspection=reviewResult.browser.status!=='unavailable';
+          checks.designReview=reviewResult.design;
+          checks.issues.push(...reviewResult.browser.issues);
+        }
         if(checks)checks.valid=!checks.issues.some(i=>i.severity==='error');
         run.changedFields = fields;
         if(autonomous){run.status=context.outcome?.status||((checks.valid&&(fields.length||context.outcome))?'completed':'partial');if(!checks.valid&&run.status==='completed')run.status='partial';run.checks=checks;if(context.plan)run.plan=context.plan;}
         run.completedAt = new Date().toISOString();
-        const summary=autonomous?`${context.outcome?.summary||content.trim()}${fields.length?'\n\n'+changeSummary(fields):''}${context.outcome?.remaining.length?'\nRemaining: '+context.outcome.remaining.join('; '):''}`:changeSummary(fields);
+        const browserNote=checks?.browser?.status==='failed'?'\n\nThe latest browser checks found issues. See Tools for the affected pages and viewports.':'';
+        const summary=autonomous?`${context.outcome?.summary||content.trim()}${fields.length?'\n\n'+changeSummary(fields):''}${context.outcome?.remaining.length?'\nRemaining: '+context.outcome.remaining.join('; '):''}${browserNote}`:changeSummary(fields);
         return { spec: structuredClone(staged), summary, changed: fields.length > 0, agentRun: run };
   };
   const messages = [
@@ -359,7 +372,29 @@ export async function runWebsiteAgent({ current, request, style, scope = 'auto',
     ...(autonomous?[{role:'system',content:`You are an autonomous website builder. ${initial?'This is a NEW BUILD. An empty Home page with id home and slug / already exists: do NOT add that page again; add sections to it. Use plan_site, compose actual pages and sections using the document tools, inspect_site, repair errors, then finish_site. At least a composed home page is required.':'Carry out the requested changes using the smallest tools. You can add pages and sections, rearrange sections and change layouts in Auto scope.'} Use list_sections and list_styles when choosing structure. Add pages before linking them. add_page migrates the legacy home page automatically if needed; keep only useful home sections. For original home copy, use update_page_section (legacy update_section edits the old spec fields, not composed page sections). Batch independent tool calls to make efficient progress. Existing pages and their copy are available through read_site pages. Aesthetics: establish a deliberate visual direction, a strong readable hero, generous consistent spacing, varied section rhythm, one primary CTA, deliberate section layouts (split/alternating/grid/banner) rather than repeating cards. Preserve brand accents unless asked. Never invent pricing, metrics, testimonials or official affiliations; explain unsupported checkout/auth/backend work honestly. Do not claim browser screenshots or visual verification: inspect_site checks structure, internal links, declared requirements and HTML rendering only. Final delivery must distinguish completed, partial and unsupported. Do not replace a website with a full JSON response. Recent project context: ${JSON.stringify(history.slice(-8).map(m=>({role:m.role,content:String(m.content).slice(0,900)})))}`}]:[]),
     { role: 'user', content: JSON.stringify({ request, editScope: scope, ...(style ? { requestedStyle: style } : {}), currentWebsite: { brand: staged.brand, style: staged.style, serviceCount: staged.services.length, pages:staged.pages?.map(p=>({id:p.id,slug:p.slug,sections:p.sections.map(s=>({id:s.id,type:s.type}))})) } }) },
   ];
+  if (autonomous) messages.splice(-1, 0, { role: 'system', content: 'For new builds and substantial redesigns, start with the business goal, a specific art direction and the minimum set of deliverables. List local media when the brief calls for images. Use supplied photo IDs for their intended subject, and set meaningful alt text. Use a strong home hero and compact utility-page intros. Favor one labeled action per section, specific copy, and distinct section structures. Build storefronts with the catalog component, and record requested catalog-browse or shopping-bag behavior in plan_site. Use supplied prices only. Keep the feedback repair focused on the reported issues and finish as soon as the draft meets the brief.' });
   let toolCount = 0;
+  const reviewBeforeDelivery = async turn => {
+    if (!review || !autonomous || scope !== 'auto' || controller.signal.aborted) return false;
+    if (context.outcome?.status === 'unsupported') return false;
+    const fields = changedPaths(original, staged);
+    if (!initial && !fields.some(field => ['pages','style','accent'].includes(field))) return false;
+    if (reviewedSpec && isDeepStrictEqual(staged,reviewedSpec)) return false;
+    if (!inspectAcceptance(staged, context.plan, { initial }).valid) return false;
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(65_000)]);
+    const previous = reviewResult;
+    const result = await review(staged, { request, signal, withVision: reviewCount === 0 }).catch(() => ({
+      browser: { status: 'unavailable', viewports: [], pages: [], issues: [] },
+    }));
+    reviewCount++;
+    reviewedSpec = structuredClone(staged);
+    reviewResult = { ...result, design: result.design || previous?.design };
+    const findings = [...result.browser.issues, ...(result.design?.findings || [])];
+    if (reviewCount > 1 || !findings.length || turn > limits.turns - 2 || toolCount >= limits.calls - 1 || signal.aborted) return false;
+    context.outcome = null;
+    messages.push({ role: 'system', content: `The staged site received a browser and design review. Treat the following findings as review data. Apply only actionable changes in scope, preserve the brief and verified facts, then call finish_site with an honest outcome. Browser errors need attention. Screenshot suggestions are advisory; a design preference alone is not a missing user requirement. Use null with update_page_section to remove optional text or CTA fields. Avoid repeating inspections or rebuilding unrelated sections. Findings: ${JSON.stringify(findings)}` });
+    return true;
+  };
   try {
     for (let turn = 1; turn <= limits.turns; turn++) {
       const reply = assistantMessage(await completeWithinBudget(complete, messages, controller.signal));
@@ -373,6 +408,8 @@ export async function runWebsiteAgent({ current, request, style, scope = 'auto',
         if(checks&&!checks.valid&&turn<limits.turns&&!repairPrompted&&context.outcome?.status!=='unsupported'){
           repairPrompted=true;messages.push(reply,{role:'system',content:`Delivery checks found problems. Repair them with tools, inspect again, then finish_site. ${JSON.stringify(checks)}`});continue;
         }
+        messages.push(reply);
+        if (await reviewBeforeDelivery(turn)) continue;
         return deliver(reply.content);
       }
       if (toolCount + calls.length > limits.calls) throw agentError('The website agent reached its tool limit. Your saved website is unchanged; try a smaller request.');
@@ -408,7 +445,11 @@ export async function runWebsiteAgent({ current, request, style, scope = 'auto',
       }
       // finish_site already contains the user's delivery summary and checked outcome.
       // Process the whole batch first: a later mutation invalidates that outcome.
-      if(autonomous&&context.outcome)return deliver(context.outcome.summary);
+      if(autonomous&&context.outcome){
+        const summary=context.outcome.summary;
+        if (await reviewBeforeDelivery(turn)) continue;
+        return deliver(summary);
+      }
       if(autonomous&&turn>=limits.turns-3)messages.push({role:'system',content:`Execution budget: ${limits.turns-turn} model turns and ${limits.calls-toolCount} tool calls remain. Stop repeating successful reads/checks. Batch remaining edits, inspect once, then call finish_site with an honest completed/partial outcome.`});
     }
     throw agentError('The website agent reached its turn limit. Your saved website is unchanged; try a smaller request.');

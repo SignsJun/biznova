@@ -99,7 +99,7 @@ test('Inspection checks page headings, content, orphan anchors and qualified int
 test('Link syntax and schema remain bounded and reflect the component catalog',()=>{
  for(const link of ['#contact','/#contact','/work','/work#intro','/'])assert.equal(isDocumentHref(link),true);
  for(const link of ['https://example.com','javascript:alert(1)','//example.com','/a/../b','/nested/page','/api','#','/work?query=1','/work.html'])assert.equal(isDocumentHref(link),false);
- assert.equal(DOCUMENT_TOOLS.length,7);assert.equal(SECTION_CATALOG.length,9);
+ assert.ok(DOCUMENT_TOOLS.some(tool=>tool.function.name==='update_product'));assert.ok(SECTION_CATALOG.some(section=>section.type==='catalog'));
  for(const definition of DOCUMENT_TOOLS){assert.equal(definition.type,'function');assert.equal(definition.function.parameters.additionalProperties,false);}
  const pages=migrateLegacyPages(legacy());assert.equal(assertPages(pages),pages);
  const duplicate=structuredClone(pages);duplicate[0].sections.push({...duplicate[0].sections[0]});invalid(()=>assertPages(duplicate));

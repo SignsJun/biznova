@@ -1,5 +1,6 @@
 import { assertPages, isDocumentHref } from './site-document.mjs';
 import { renderDocumentPage, documentPageFiles } from './site-document-renderer.mjs';
+import { siteMediaFiles } from './site-media.mjs';
 import { STYLE_IDS, STYLE_CATALOG } from '../lib/studio-styles.ts';
 import { renderStyleVariant } from './site-style-variants.mjs';
 // Original, dependency-free website compositions. Gallery references inform the
@@ -247,6 +248,7 @@ db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT 
 const insert=db.prepare('INSERT INTO leads(name,email,company,message,created_at) VALUES (?,?,?,?,?)');
 const spec=JSON.parse(readFileSync(join(root,'site.json'),'utf8'));
 const pageFiles=new Map((spec.pages||[{slug:'/'}]).map(page=>[page.slug,join(root,'public',page.slug==='/'?'index.html':page.slug.slice(1)+'/index.html')]));
+const assetIds=new Set((spec.pages||[]).flatMap(page=>page.sections.flatMap(section=>[section.media?.id,...(section.items||[]).map(item=>item.media?.id)])));
 const port=Number(process.env.PORT||3100);
 if(!Number.isInteger(port)||port<0||port>65535){console.error('PORT must be an integer from 0 to 65535.');db.close();process.exit(1)}
 const server=createServer(async(req,res)=>{
@@ -255,6 +257,8 @@ const server=createServer(async(req,res)=>{
   try{
     if(['GET','HEAD'].includes(req.method)){
       const pagePath=url.pathname==='/'?'/':url.pathname.replace(/\/$/,'');if(pageFiles.has(pagePath))return send(200,readFileSync(pageFiles.get(pagePath)),'text/html; charset=utf-8');
+      const asset=url.pathname.match(/^\/assets\/([a-z][a-z0-9-]{0,63})\.webp$/);
+      if(asset&&assetIds.has(asset[1]))return send(200,readFileSync(join(root,'public','assets',asset[1]+'.webp')),'image/webp');
       if(url.pathname==='/api/health'){db.prepare('SELECT 1').get();return send(200,{status:'ok',database:'connected',runtime:'local-node'})}
       if(url.pathname==='/api/site')return send(200,{brand:spec.brand,tagline:spec.tagline,services:spec.services});
       return send(404,{error:'Not found.'});
@@ -287,6 +291,7 @@ export function createProjectFiles(input) {
   const readme=`# ${spec.brand} — local website project\n\nThis project contains an original responsive frontend and a working local Node.js + SQLite backend. It is generated from your approved website specification. No deployment, cloud account or package installation is required.\n\n## Run\n\nRequires Node.js 24 or later. From this folder:\n\n\`\`\`sh\nnode server.mjs\n\`\`\`\n\nOpen http://127.0.0.1:3100 . Keep the terminal open. Press Ctrl+C to stop. On macOS you can also double-click start.command.\n\nUse \`PORT=3101 node server.mjs\` if the default port is occupied.\n\n## Files\n\n- \`public/index.html\`: full responsive site, styles, original CSS artwork, mobile navigation, FAQ and contact form. All assets run locally.\n- \`server.mjs\`: HTTP server, input validation and parameterized SQLite writes.\n- \`site.json\`: editable website specification. Editing it does not automatically rebuild the rendered HTML; change the project through BizNova and export again, or edit public/index.html directly.\n- \`data/site.sqlite\`: created automatically; stores submitted enquiries. Back up the entire data folder after stopping the server.\n\n## Backend\n\n- \`GET /api/health\`: local database health.\n- \`GET /api/site\`: public business content.\n- \`POST /api/leads\`: save an enquiry. JSON fields: name, email, company (optional), message.\n\nThe contact form writes to the database; it does not send email. The server only listens on this computer. Before offering it publicly, add identity/access controls where needed, spam protection, email delivery and appropriate privacy content. No user accounts, payments or live integrations are included. Copywriting is a starting point: verify business claims, contact details and service descriptions before sharing.\n`;
   return [
     ...(spec.pages?documentPageFiles(spec,{escape,arrow,mark:spec.pageType==='toy-store'?toyMark:mark,clientScript,toyArtwork,toyCollectionArt}):[{path:'public/index.html',content:renderSite(spec)}]),
+    ...siteMediaFiles(spec),
     {path:'server.mjs',content:generatedServer},
     {path:'site.json',content:JSON.stringify(spec,null,2)+'\n'},
     {path:'package.json',content:JSON.stringify({name:'biznova-generated-website',version:'1.0.0',private:true,type:'module',engines:{node:'>=24'},scripts:{start:'node server.mjs'}},null,2)+'\n'},

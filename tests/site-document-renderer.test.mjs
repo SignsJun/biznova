@@ -9,6 +9,8 @@ import {once} from 'node:events';
 import {STYLE_IDS} from '../lib/studio-styles.ts';
 import {renderDocumentPage,documentPageFiles} from '../local/site-document-renderer.mjs';
 import {DEFAULT_SPEC,createProjectFiles} from '../local/site-generator.mjs';
+import {assertPages,executeDocumentTool} from '../local/site-document.mjs';
+import {inspectAcceptance} from '../local/site-planning.mjs';
 
 const document=()=>({...structuredClone(DEFAULT_SPEC),brand:'Brick & Wonder',style:'clay',nav:[{label:'Home',href:'/'},{label:'Collections',href:'/collections'},{label:'Contact',href:'/collections#contact'}],pages:[
  {id:'home',slug:'/',title:'Home',sections:[
@@ -107,4 +109,34 @@ test('Implicit links remain valid when the document has no contact section',()=>
   }
   assert.ok(!html.includes('href="/#contact"'));
  }
+});
+
+test('Catalog media is local and a shopping-bag plan requires explicitly supplied prices',()=>{
+ const site=document();
+ const image={id:'drinkware-hero',alt:'A steel flask',focus:'right'};
+ Object.assign(site.pages[0].sections[0],{layout:'image-led',media:image});
+ const item={sku:'flask',title:'Steel Flask',category:'Hydration',media:image,priceCents:3400};
+ const catalog={id:'shop',type:'catalog',layout:'grid',title:'Shop',currency:'USD',detailLayout:'stacked',items:[item]};
+ site.pages[0].sections.push(catalog);
+ const files=createProjectFiles(site);
+ const original=files.find(file=>file.path==='public/assets/drinkware-hero.webp');
+ assert.ok(Buffer.isBuffer(original.content));
+ assert.equal(original.content.toString('ascii',8,12),'WEBP');
+ assert.equal(files.filter(file=>file.path===original.path).length,1);
+ const html=renderDocumentPage(site,{preview:true,projectId:'shop-preview'});
+ assert.match(html,/focus-right.*\/api\/studio\/media\/assets\/drinkware-hero.webp.*A steel flask/);
+ assert.match(html,/catalog-detail layout-stacked/);
+ assert.match(html,/data-open-bag/);
+ const revised=executeDocumentTool('update_product',{pageId:'home',sectionId:'shop',sku:'flask',changes:{title:'Travel Flask'}},site).spec;
+ assert.equal(revised.pages[0].sections.at(-1).items[0].title,'Travel Flask');
+ assert.equal(revised.pages[0].sections.at(-1).items[0].priceCents,3400);
+ const withoutButton=executeDocumentTool('update_page_section',{pageId:'home',sectionId:'hero',changes:{buttonLabel:null,buttonHref:null}},revised).spec;
+ assert.doesNotMatch(renderDocumentPage(withoutButton).split('</section>')[0],/<a class="button-primary"/);
+ const plan={requiredInteractions:[{pageSlug:'/',feature:'shopping-bag'}]};
+ assert.equal(inspectAcceptance(site,plan).valid,true);
+ delete item.priceCents;
+ assert.throws(()=>assertPages(site.pages),/supplied price/);
+ delete catalog.currency;
+ assert.ok(inspectAcceptance(site,plan).issues.some(issue=>issue.code==='required_interaction'));
+ assert.doesNotMatch(renderDocumentPage(site).split('</main>')[0],/<button[^>]*data-open-bag/);
 });

@@ -129,6 +129,27 @@ test('A mutation after finish in the same batch invalidates the outcome and must
  assert.match(result.summary,/Checked and delivered the later headline change/);
 });
 
+test('A visual review can request one repair and final checks describe the repaired draft',async()=>{
+ const drafts=[];
+ const mobileChecks={status:'passed',viewports:[{width:390,height:844}],pages:[{slug:'/',width:390}],issues:[]};
+ const steps=buildResponses().slice(0,4);
+ steps.push(messages=>{
+  assert.match(messages.at(-1).content,/The shop heading needs less space/);
+  return calling(call('compact','update_page_section',{pageId:'about',sectionId:'intro',changes:{layout:'compact'}}));
+ },calling(call('finish-repair','finish_site',completed())));
+ const result=await runWebsiteAgent({current:seed(),request:'Build and review home and about pages.',autonomous:true,initial:true,complete:script(steps),
+  review:async(spec,{withVision})=>{
+   drafts.push({withVision,layout:spec.pages[1].sections[0].layout});
+   return withVision?{browser:mobileChecks,design:{status:'reviewed',findings:[{page:'/about',observation:'The shop heading needs less space',suggestion:'Use the compact hero'}]}}:{browser:mobileChecks};
+  },
+ });
+ assert.deepEqual(drafts,[{withVision:true,layout:'centered'},{withVision:false,layout:'compact'}]);
+ assert.equal(result.spec.pages[1].sections[0].layout,'compact');
+ assert.equal(result.agentRun.checks.browserInspection,true);
+ assert.equal(result.agentRun.checks.designReview.status,'reviewed');
+ assert.equal(result.agentRun.status,'completed');
+});
+
 test('Exhausting the autonomous turn budget rolls back edits and exposes bounded tool diagnostics',async()=>{
  const current=normalizeSpec(DEFAULT_SPEC),original=structuredClone(current);let turns=0;
  await assert.rejects(runWebsiteAgent({current,request:'Update the headline.',autonomous:true,complete:async()=>{

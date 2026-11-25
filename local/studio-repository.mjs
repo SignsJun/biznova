@@ -83,7 +83,7 @@ function writeAgentRun(db,projectId,versionId,revision,run,now) {
     (id,project_id,version_id,revision,status,started_at,completed_at,steps_json,changed_fields_json,model_turns,model,created_at,scope,details_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     run.id,projectId,versionId,revision,run.status,run.startedAt,run.completedAt,
-    JSON.stringify(steps),JSON.stringify(run.changedFields),run.modelTurns,run.model||null,now,publicScope(run.scope),JSON.stringify({...(run.plan?{plan:run.plan}:{}),...(run.checks?{checks:run.checks}:{})})
+    JSON.stringify(steps),JSON.stringify(run.changedFields),run.modelTurns,run.model||null,now,publicScope(run.scope),JSON.stringify({...(run.plan?{plan:run.plan}:{}),...(run.checks?{checks:run.checks}:{}),...(run.usage?{usage:run.usage}:{})})
   );
 }
 export function createProject(db,{name,prompt,spec,summary,agentRun}) {
